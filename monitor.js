@@ -33,8 +33,12 @@
     if (isApiCall) {
       console.log('📡 API CALL DETECTED:', url);
       
+      // Generate unique request ID
+      const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
       // Capture request details
       const requestInfo = {
+        requestId,
         timestamp: new Date().toISOString(),
         url,
         method: options.method
@@ -50,6 +54,14 @@
             console.log('📡 Parsed body:', parsedBody);
             requestInfo.body = parsedBody;
             
+            // Send the request to content script
+            sendMessage('REQUEST', {
+              requestId,
+              url,
+              method: options.method,
+              body: parsedBody
+            });
+            
             // Log messages
             if (parsedBody.messages && Array.isArray(parsedBody.messages)) {
               console.log('📡 Messages found:', parsedBody.messages.length);
@@ -58,6 +70,12 @@
                 const role = msg.author?.role || 'unknown';
                 console.log(`📡 Message ${idx+1} [${role}]:`, 
                   msg.content?.parts ? msg.content.parts.join('\n') : JSON.stringify(msg.content));
+              });
+              
+              // Send messages to content script
+              sendMessage('REQUEST_MESSAGES', {
+                requestId,
+                messages: parsedBody.messages
               });
             }
           } catch (e) {
@@ -68,9 +86,6 @@
       
       // Store the request
       window._capturedRequests.push(requestInfo);
-      
-      // Generate unique request ID
-      const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
       // Make the original request
       const originalResponse = await originalFetch.apply(this, arguments);
@@ -84,6 +99,14 @@
         status: originalResponse.status,
         statusText: originalResponse.statusText
       };
+      
+      // Send basic response info to content script
+      sendMessage('RESPONSE', {
+        requestId,
+        url,
+        status: originalResponse.status,
+        statusText: originalResponse.statusText
+      });
       
       // Check if it's a streaming response
       const contentType = originalResponse.headers.get('content-type') || '';
@@ -125,14 +148,27 @@
             console.log('📡 COMPLETE STREAMED RESPONSE:');
             console.log(fullText);
             
+            // Send the complete streamed response to content script
+            sendMessage('STREAMED_RESPONSE_COMPLETE', {
+              requestId,
+              fullText
+            });
+            
             // Extract relevant content
             const assistantMessage = extractFullMessageFromStream(fullText);
             if (assistantMessage) {
               console.log('📡 ASSISTANT MESSAGE:', assistantMessage);
               responseInfo.message = assistantMessage;
+              
+              // Send the extracted message to content script
+              sendMessage('ASSISTANT_MESSAGE', assistantMessage);
             }
           } catch (error) {
             console.error('📡 Error reading stream:', error);
+            sendMessage('ERROR', {
+              requestId,
+              error: error.message
+            });
           }
         })();
         
@@ -145,6 +181,12 @@
           
           console.log('📡 Response body (JSON):', jsonData);
           responseInfo.body = jsonData;
+          
+          // Send JSON response to content script
+          sendMessage('JSON_RESPONSE', {
+            requestId,
+            body: jsonData
+          });
         } catch (e) {
           console.log('📡 Error parsing JSON response:', e.message);
         }
@@ -156,6 +198,12 @@
           responseInfo.text = text;
           console.log('📡 Response text:', text.substring(0, 500) + 
             (text.length > 500 ? '...' : ''));
+          
+          // Send text response to content script
+          sendMessage('TEXT_RESPONSE', {
+            requestId,
+            text: text.substring(0, 1000) + (text.length > 1000 ? '...[truncated]' : '')
+          });
         } catch (e) {
           console.log('📡 Error reading text response:', e.message);
         }
@@ -173,12 +221,20 @@
     return originalFetch.apply(this, arguments);
   };
   
-  // Improved message extractor that handles all formats
+  // Improved message extractor that handles all formats and extracts all fields
   function extractFullMessageFromStream(text) {
     try {
-      // For building the complete message
-      let fullMessage = '';
-      let messageId = '';
+      // Initialize result structure
+      const result = {
+        requestId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        content: '',
+        messageId: '',
+        metadata: {},
+        author: {},
+        createTime: null,
+        status: null,
+        endTurn: null
+      };
       
       // Parse the event stream
       const events = [];
@@ -217,49 +273,107 @@
         });
       }
       
-      // Now process the events to extract the message
+      // Process the initial delta event to extract message structure
       for (const event of events) {
         if (event.event === 'delta') {
           try {
             const data = JSON.parse(event.data);
             
-            // Handle initial message
+            // Find the initial message with all fields
             if (data.p === '' && data.o === 'add' && data.v && data.v.message) {
-              if (data.v.message.id) {
-                messageId = data.v.message.id;
+              const message = data.v.message;
+              
+              // Capture all available fields
+              if (message.id) result.messageId = message.id;
+              if (message.author) result.author = message.author;
+              if (message.create_time) result.createTime = message.create_time;
+              if (message.status) result.status = message.status;
+              if (message.end_turn !== undefined) result.endTurn = message.end_turn;
+              if (message.metadata) result.metadata = message.metadata;
+              
+              // Get initial content if available
+              if (message.content && message.content.parts && message.content.parts[0]) {
+                result.content = message.content.parts[0];
               }
               
-              // Initialize the message content if it exists
-              if (data.v.message.content && 
-                  data.v.message.content.parts && 
-                  data.v.message.content.parts[0]) {
-                fullMessage = data.v.message.content.parts[0];
+              // Extract other fields that might be useful
+              if (message.weight) result.weight = message.weight;
+              if (message.recipient) result.recipient = message.recipient;
+              if (message.channel) result.channel = message.channel;
+              
+              // Also capture conversation ID if available
+              if (data.v.conversation_id) {
+                result.conversationId = data.v.conversation_id;
               }
-            }
-            // Handle direct text append to the message content
-            else if (data.p === '/message/content/parts/0' && data.o === 'append' && typeof data.v === 'string') {
-              fullMessage += data.v;
-            }
-            // Handle simple string append
-            else if (typeof data.v === 'string') {
-              fullMessage += data.v;
-            }
-            // Handle patch operations with additional appends
-            else if (data.p === '' && data.o === 'patch' && Array.isArray(data.v)) {
-              // Look for any appends to the message content
-              for (const patch of data.v) {
-                if (patch.p === '/message/content/parts/0' && patch.o === 'append' && typeof patch.v === 'string') {
-                  fullMessage += patch.v;
-                }
-              }
+              
+              break; // First message is enough for structure
             }
           } catch (e) {
-            console.log('Error parsing delta event:', e);
+            console.log('Error parsing initial delta event:', e);
           }
         }
       }
       
-      return fullMessage ? { content: fullMessage, messageId } : null;
+      // Now process all events to build the content
+      for (const event of events) {
+        if (event.event === 'delta') {
+          try {
+            const data = JSON.parse(event.data);
+            
+            // Different content append patterns
+            if (data.p === '/message/content/parts/0' && data.o === 'append' && typeof data.v === 'string') {
+              result.content += data.v;
+            }
+            else if (typeof data.v === 'string') {
+              result.content += data.v;
+            }
+            else if (data.p === '' && data.o === 'patch' && Array.isArray(data.v)) {
+              // Process patches
+              for (const patch of data.v) {
+                if (patch.p === '/message/content/parts/0' && patch.o === 'append' && typeof patch.v === 'string') {
+                  result.content += patch.v;
+                }
+                
+                // Update message status if it changes
+                if (patch.p === '/message/status' && patch.o === 'replace') {
+                  result.status = patch.v;
+                }
+                
+                // Update end_turn if it changes
+                if (patch.p === '/message/end_turn' && patch.o === 'replace') {
+                  result.endTurn = patch.v;
+                }
+                
+                // Update metadata if it's appended
+                if (patch.p === '/message/metadata' && patch.o === 'append' && typeof patch.v === 'object') {
+                  result.metadata = {...result.metadata, ...patch.v};
+                }
+              }
+            }
+          } catch (e) {
+            console.log('Error processing delta event:', e);
+          }
+        }
+        else if (event.data && !event.event) {
+          // Handle the messages without an event type
+          try {
+            const data = JSON.parse(event.data);
+            
+            // Capture metadata from non-delta events
+            if (data.type === 'message_stream_complete' && data.conversation_id) {
+              result.conversationId = data.conversation_id;
+            }
+            else if (data.type === 'conversation_detail_metadata') {
+              result.conversationMetadata = data;
+            }
+          } catch (e) {
+            // Ignore parsing errors for non-delta events
+          }
+        }
+      }
+      
+      // Only return if we have at least a message ID or content
+      return (result.messageId || result.content) ? result : null;
     } catch (e) {
       console.error('Error extracting full message:', e);
       return null;
@@ -275,6 +389,7 @@
     
     const lastRequest = window._capturedRequests[window._capturedRequests.length - 1];
     console.log('LAST REQUEST:', lastRequest);
+    sendMessage('SHOW_LAST_REQUEST', lastRequest);
     return lastRequest;
   };
   
@@ -293,10 +408,11 @@
       
       if (lastResponse.message) {
         console.log('EXTRACTED MESSAGE:');
-        console.log(lastResponse.message.content);
+        console.log(lastResponse.message);
       }
     }
     
+    sendMessage('SHOW_LAST_RESPONSE', lastResponse);
     return lastResponse;
   };
   

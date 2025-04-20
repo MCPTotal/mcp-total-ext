@@ -1,7 +1,12 @@
 // CSP-Friendly ChatGPT API Monitor
 
 (function() {
-  console.log('🔍 Starting CSP-friendly API monitor');
+  console.log('🔍 Initalizing monitor script');
+  
+  // Store the last captured request/response pair
+  let lastRequest = null;
+  let lastResponse = null;
+  let lastAssistantMessage = null;
   
   // Create a separate script element with src to bypass CSP restrictions
   function createMonitorScript() {
@@ -16,10 +21,26 @@
       
       // Check if it's our message
       if (event.data && event.data.type === 'API_MONITOR') {
-        console.log('📡 MESSAGE FROM PAGE SCRIPT:', event.data.action);
+        const action = event.data.action;
+        const data = event.data.data;
         
-        if (event.data.data) {
-          console.log('📡 DATA:', event.data.data);
+        // Generic log of action and data
+        console.log(`📡 ${action}:`, data);
+        
+        // Store important data based on action type
+        switch (action) {
+          case 'REQUEST':
+            lastRequest = data;
+            break;
+            
+          case 'ASSISTANT_MESSAGE':
+            lastAssistantMessage = data;
+            break;
+            
+          case 'JSON_RESPONSE':
+          case 'TEXT_RESPONSE':
+            lastResponse = data;
+            break;
         }
       }
     });
@@ -29,6 +50,72 @@
     console.log('🔍 Monitor script added to page');
   }
   
+  // Expose functions to get the last captured request/response in the content script
+  window.getLastRequest = function() {
+    if (!lastRequest) {
+      console.log('🔍 No request captured yet');
+      return null;
+    }
+    console.log('🔍 Last request:', lastRequest);
+    return lastRequest;
+  };
+  
+  window.getLastResponse = function() {
+    if (!lastResponse) {
+      console.log('🔍 No response captured yet');
+      return null;
+    }
+    console.log('🔍 Last response:', lastResponse);
+    return lastResponse;
+  };
+  
+  window.getLastAssistantMessage = function() {
+    if (!lastAssistantMessage) {
+      console.log('🔍 No assistant message captured yet');
+      return null;
+    }
+    
+    // Pretty print important fields
+    console.group('🔍 Assistant Message Details');
+    console.log('ID:', lastAssistantMessage.messageId);
+    console.log('Content:', lastAssistantMessage.content);
+    
+    // Log other fields if they exist
+    if (lastAssistantMessage.author) console.log('Author:', lastAssistantMessage.author);
+    if (lastAssistantMessage.createTime) console.log('Create time:', 
+      new Date(lastAssistantMessage.createTime * 1000).toISOString());
+    if (lastAssistantMessage.status) console.log('Status:', lastAssistantMessage.status);
+    if (lastAssistantMessage.endTurn !== undefined) console.log('End turn:', lastAssistantMessage.endTurn);
+    if (lastAssistantMessage.metadata) console.log('Metadata:', lastAssistantMessage.metadata);
+    if (lastAssistantMessage.conversationId) console.log('Conversation ID:', lastAssistantMessage.conversationId);
+    console.groupEnd();
+    
+    return lastAssistantMessage;
+  };
+  
+  // Additional helper function to get only the message content
+  window.getLastMessageContent = function() {
+    if (!lastAssistantMessage) {
+      console.log('🔍 No assistant message captured yet');
+      return null;
+    }
+    
+    console.log('🔍 Last message content:', lastAssistantMessage.content);
+    return lastAssistantMessage.content;
+  };
+  
+  // Helper to get model name from the last message
+  window.getLastModelUsed = function() {
+    if (!lastAssistantMessage || !lastAssistantMessage.metadata) {
+      console.log('🔍 No model information available');
+      return null;
+    }
+    
+    const model = lastAssistantMessage.metadata.model_slug || 'Unknown';
+    console.log('🔍 Last model used:', model);
+    return model;
+  };
+  
   // Call this function to start the monitor
   createMonitorScript();
   
@@ -37,5 +124,5 @@
     window.postMessage({ type: 'API_MONITOR_CHECK', action: 'ping' }, '*');
   }, 1000);
   
-  console.log('🔍 API Monitor initialized (CSP-friendly version)');
+  console.log('🔍 Monitor script initialized');
 })(); 
