@@ -1,0 +1,29 @@
+{
+  "name": "mcp-tools-for-chatgpt",
+  "version": "0.1.0",
+  "description": "Inject MCP tool definitions and handle tool calls when using ChatGPT in the browser",
+  "main": "content.js",
+  "scripts": {
+    "build": "esbuild content.js options.js --bundle --minify --outdir=dist",
+    "build:dev": "esbuild content.js options.js --bundle --outdir=dist",
+    "watch": "esbuild content.js options.js --bundle --outdir=dist --watch",
+    "package": "npm run build && node scripts/package.js",
+    "test": "jest",
+    "lint": "eslint ."
+  },
+  "keywords": [
+    "chrome-extension",
+    "chatgpt",
+    "openai",
+    "mcp",
+    "tools"
+  ],
+  "author": "Ariel Shiftan",
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.19.5",
+    "jest": "^29.7.0",
+    "archiver": "^6.0.1",
+    "eslint": "^8.50.0"
+  }
+} 
