@@ -4,9 +4,27 @@
 (function() {
   console.log('📡 MONITOR SCRIPT LOADED');
   
+  // UUID v4 generator function
+  function uuidv4() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+  
   // Store captured requests and responses
   window._capturedRequests = [];
   window._capturedResponses = [];
+  
+  // Tool handling
+  const TOOL_INSTRUCTIONS = `You have access to the following tools. When needed, use them by outputting the exact format: \`\`\`tool:toolName(param1, param2)\`\`\`
+
+getCurrentTime: Get the current date and time
+
+For example, to get the current time, output: \`\`\`tool:getCurrentTime()\`\`\`
+
+When a user asks for information that requires one of these tools, use them.`;
   
   // Send a message back to the content script
   function sendMessage(action, data) {
@@ -15,6 +33,36 @@
       action: action,
       data: data
     }, '*');
+  }
+  
+  // Execute tool calls
+  function executeToolCall(toolName) {
+    console.log(`📡 Executing tool: ${toolName}`);
+    
+    if (toolName === 'getCurrentTime') {
+      return new Date().toISOString();
+    }
+    
+    return `Error: Unknown tool ${toolName}`;
+  }
+  
+  // Parse tool calls from assistant responses
+  function parseToolCalls(text) {
+    const toolCallRegex = /```tool:(\w+)\((.*?)\)```/g;
+    const matches = text.match(toolCallRegex);
+    
+    if (!matches) return null;
+    
+    // Extract the tool name
+    const match = /```tool:(\w+)\((.*?)\)```/.exec(text);
+    if (match) {
+      return {
+        toolName: match[1],
+        params: match[2]
+      };
+    }
+    
+    return null;
   }
   
   // Monitor fetch at the lowest level possible
@@ -48,11 +96,39 @@
       if (options.body) {
         console.log('📡 Raw body:', options.body);
         
+        var originalRequest = '';
         if (typeof options.body === 'string') {
           try {
             const parsedBody = JSON.parse(options.body);
             console.log('📡 Parsed body:', parsedBody);
             requestInfo.body = parsedBody;
+            
+            // Check if we have messages to modify
+            if (parsedBody.messages && Array.isArray(parsedBody.messages)) {
+              let modified = false;
+              
+              if (parsedBody.messages[0].author.role === 'user') {
+                console.log('📡 Prepending tool instructions to user message');
+                
+                // Prepend tool instructions to user message content
+                originalRequest = parsedBody.messages[0].content.parts[0];
+                parsedBody.messages[0].content.parts[0] = `${TOOL_INSTRUCTIONS}\n\nUser query: ${originalRequest}`;
+                modified = true;
+              }
+              
+              // If we modified the request, update the options.body
+              if (modified) {
+                console.log('📡 Modified request:', parsedBody);
+                options.body = JSON.stringify(parsedBody);
+                
+                // Update our arguments
+                if (typeof arguments[0] === 'string') {
+                  arguments[1] = options;
+                } else {
+                  arguments[0].body = options.body;
+                }
+              }
+            }
             
             // Send the request to content script
             sendMessage('REQUEST', {
@@ -113,67 +189,298 @@
       if (contentType.includes('text/event-stream') || originalResponse.headers.get('transfer-encoding') === 'chunked') {
         console.log('📡 Streaming response detected');
         responseInfo.streaming = true;
-        responseInfo.streamedText = '';
         
-        // Store the response early so we can update it
-        window._capturedResponses.push(responseInfo);
-        
-        // Clone the response to read it
-        const clonedResponse = originalResponse.clone();
-        
-        // Read the stream in the background
-        (async () => {
+        // Create a promise that will resolve with our final response
+        const responsePromise = (async () => {
           try {
+            // Clone the response to analyze it
+            const clonedResponse = originalResponse.clone();
+            
+            // Check if the response contains a tool call
             const reader = clonedResponse.body.getReader();
             const decoder = new TextDecoder();
-            let done = false;
+            let earlyContent = '';
             let fullText = '';
+            let toolFound = false;
+            let toolResult = null;
             
-            while (!done) {
-              const result = await reader.read();
-              done = result.done;
+            // Read enough chunks to detect a potential tool call
+            for (let i = 0; i < 5 && !toolFound; i++) {
+              const { value, done } = await reader.read();
+              if (done) break;
               
-              if (!done && result.value) {
-                const chunk = decoder.decode(result.value, { stream: true });
-                fullText += chunk;
-                console.log('📡 Stream chunk:', chunk);
+              const chunk = decoder.decode(value, { stream: true });
+              earlyContent += chunk;
+              fullText += chunk;
+              
+              // Look for tool call pattern in early chunks
+              if (earlyContent.includes('tool:getCurrentTime()') || 
+                  earlyContent.includes('```tool:getCurrentTime()```')) {
+                console.log('📡 Tool call detected in early response chunks!');
+                toolFound = true;
+                
+                // Execute the tool
+                const result = executeToolCall('getCurrentTime');
+                toolResult = {
+                  toolName: 'getCurrentTime',
+                  result: result
+                };
+                
+                console.log('📡 Tool executed with result:', result);
+                break;
+              }
+              
+              // Try to extract message content from stream
+              if (earlyContent.includes('data:')) {
+                const earlyMessage = extractPartialMessageFromStream(earlyContent);
+                if (earlyMessage && earlyMessage.content) {
+                  // Check for tool call
+                  const toolCall = parseToolCalls(earlyMessage.content);
+                  if (toolCall && toolCall.toolName === 'getCurrentTime') {
+                    console.log('📡 Tool call detected in early parsed content:', toolCall);
+                    toolFound = true;
+                    
+                    // Execute the tool
+                    const result = executeToolCall(toolCall.toolName);
+                    toolResult = {
+                      toolName: toolCall.toolName, 
+                      result: result
+                    };
+                    
+                    console.log('📡 Tool executed with result:', result);
+                    break;
+                  }
+                }
               }
             }
             
-            // Final decode to flush remaining bytes
-            const finalChunk = decoder.decode();
-            if (finalChunk) fullText += finalChunk;
-            
-            responseInfo.streamedText = fullText;
-            console.log('📡 COMPLETE STREAMED RESPONSE:');
-            console.log(fullText);
-            
-            // Send the complete streamed response to content script
-            sendMessage('STREAMED_RESPONSE_COMPLETE', {
-              requestId,
-              fullText
-            });
-            
-            // Extract relevant content
-            const assistantMessage = extractFullMessageFromStream(fullText);
-            if (assistantMessage) {
-              console.log('📡 ASSISTANT MESSAGE:', assistantMessage);
-              responseInfo.message = assistantMessage;
+            // If a tool call was found, make a new request with the result
+            if (toolFound && toolResult) {
+              console.log('📡 Making a new request with tool result');
               
-              // Send the extracted message to content script
-              sendMessage('ASSISTANT_MESSAGE', assistantMessage);
+              // Continue reading the original response in the background for logging
+              (async () => {
+                try {
+                  let done = false;
+                  while (!done) {
+                    const result = await reader.read();
+                    done = result.done;
+                    
+                    if (!done && result.value) {
+                      const chunk = decoder.decode(result.value, { stream: true });
+                      fullText += chunk;
+                    }
+                  }
+                  
+                  // Final decode
+                  const finalChunk = decoder.decode();
+                  if (finalChunk) fullText += finalChunk;
+                  
+                  console.log('📡 COMPLETE ORIGINAL RESPONSE (REPLACED):', fullText);
+                  responseInfo.originalStreamedText = fullText;
+                  
+                  // Extract and log the full message
+                  const assistantMessage = extractFullMessageFromStream(fullText);
+                  if (assistantMessage) {
+                    console.log('📡 ORIGINAL ASSISTANT MESSAGE (REPLACED):', assistantMessage);
+                    responseInfo.originalMessage = assistantMessage;
+                    
+                    // Send for logging purposes
+                    sendMessage('TOOL_CALL_REPLACED', {
+                      requestId,
+                      originalMessage: assistantMessage,
+                      toolResult: toolResult
+                    });
+                  }
+                } catch (e) {
+                  console.error('📡 Error reading complete original response:', e);
+                }
+                await new Promise(resolve => setTimeout(resolve, 3000));
+              })();
+              
+              try {
+                // Deep clone the original request
+                const newOptions = JSON.parse(JSON.stringify(options));
+                const newBody = JSON.parse(newOptions.body);
+                
+                // Add the tool result as a new message
+                newBody.messages[0].content.parts[0] = `I executed the tool you requested.\n\nTool: ${toolResult.toolName}\nResult: ${toolResult.result}\n\nOriginal request: ${originalRequest}`;
+                newBody.messages[0].create_time+=3;
+                newBody.messages[0].id=uuidv4();
+                console.log('📡 New body:', newBody);
+
+                
+                newOptions.body = JSON.stringify(newBody);
+                console.log('📡 New options:', newOptions);
+                
+                
+                // Update our arguments
+                if (typeof arguments[0] === 'string') {
+                  arguments[1] = newOptions;
+                } else {
+                  arguments[0].body = newOptions.body;
+                }
+
+                // Make the new request
+                console.log('📡 Sending follow-up request with tool result, arguments:', arguments);
+                
+                // Use a safer approach to make the follow-up request
+                let newResponse;
+                try {
+                  // Create a clean version of the options without problematic properties
+                  const safeOptions = {
+                    method: newOptions.method,
+                    headers: newOptions.headers,
+                    body: newOptions.body,
+                    credentials: newOptions.credentials
+                  };
+                  
+                  // Make the request with the clean options
+                  newResponse = await originalFetch.apply(this, [url, safeOptions]);
+                } catch (fetchError) {
+                  console.error('📡 Error with clean fetch, trying original method:', fetchError);
+                  
+                  // Try the original approach as fallback
+                  newResponse = await originalFetch.apply(this, arguments);
+                }
+                
+                // Log information about the new response
+                console.log('📡 Received follow-up response:', newResponse.status);
+                
+                // Start reading the new response stream for logging
+                const newClonedResponse = newResponse.clone();
+                const newReader = newClonedResponse.body.getReader();
+                
+                // Log the new response in the background
+                (async () => {
+                  try {
+                    let newFullText = '';
+                    let done = false;
+                    
+                    while (!done) {
+                      const result = await newReader.read();
+                      done = result.done;
+                      
+                      if (!done && result.value) {
+                        const chunk = decoder.decode(result.value, { stream: true });
+                        newFullText += chunk;
+                      }
+                    }
+                    
+                    // Final decode
+                    const finalChunk = decoder.decode();
+                    if (finalChunk) newFullText += finalChunk;
+                    
+                    console.log('📡 COMPLETE TOOL RESULT RESPONSE:', newFullText);
+                    responseInfo.toolResultStreamedText = newFullText;
+                    
+                    // Extract and log the follow-up message
+                    const followUpMessage = extractFullMessageFromStream(newFullText);
+                    if (followUpMessage) {
+                      console.log('📡 TOOL RESULT ASSISTANT MESSAGE:', followUpMessage);
+                      responseInfo.toolResultMessage = followUpMessage;
+                      
+                      // Send for logging
+                      sendMessage('TOOL_RESULT_RESPONSE', {
+                        requestId,
+                        message: followUpMessage
+                      });
+                    }
+                  } catch (e) {
+                    console.error('📡 Error reading tool result response:', e);
+                  }
+                })();
+                
+                // Update the response info
+                responseInfo.toolExecuted = true;
+                responseInfo.toolResult = toolResult;
+                responseInfo.replacedWithToolResponse = true;
+                
+                return newResponse;
+              } catch (e) {
+                console.error('📡 Error making follow-up request:', e);
+                // Fall back to the original response if the new request fails
+                return originalResponse;
+              }
+            } else {
+              // No tool call found, set up streaming for the original response
+              
+              // Create a transform stream to pass through the original response
+              // while also logging it completely
+              const { readable, writable } = new TransformStream();
+              const newResponse = new Response(readable, originalResponse);
+              
+              // Process the original response in the background
+              (async () => {
+                try {
+                  const writer = writable.getWriter();
+                  // Reset the reader since we already consumed some chunks
+                  const originalReader = originalResponse.body.getReader();
+                  
+                  // First write the chunks we already read
+                  if (fullText) {
+                    await writer.write(new TextEncoder().encode(fullText));
+                  }
+                  
+                  // Continue reading and passing through
+                  let done = false;
+                  while (!done) {
+                    const result = await originalReader.read();
+                    done = result.done;
+                    
+                    if (!done && result.value) {
+                      const chunk = decoder.decode(result.value, { stream: true });
+                      fullText += chunk;
+                      await writer.write(result.value);
+                    }
+                  }
+                  
+                  // Final decode
+                  const finalChunk = decoder.decode();
+                  if (finalChunk) {
+                    fullText += finalChunk;
+                    if (finalChunk.length > 0) {
+                      await writer.write(new TextEncoder().encode(finalChunk));
+                    }
+                  }
+                  
+                  // Close the writer
+                  await writer.close();
+                  
+                  console.log('📡 COMPLETE STREAMED RESPONSE:', fullText);
+                  responseInfo.streamedText = fullText;
+                  
+                  // Extract and log the message
+                  const assistantMessage = extractFullMessageFromStream(fullText);
+                  if (assistantMessage) {
+                    console.log('📡 ASSISTANT MESSAGE:', assistantMessage);
+                    responseInfo.message = assistantMessage;
+                    
+                    // Send the extracted message to content script
+                    sendMessage('ASSISTANT_MESSAGE', assistantMessage);
+                  }
+                } catch (e) {
+                  console.error('📡 Error processing stream:', e);
+                  try {
+                    writable.getWriter().close();
+                  } catch (err) {}
+                }
+              })();
+              
+              return newResponse;
             }
-          } catch (error) {
-            console.error('📡 Error reading stream:', error);
-            sendMessage('ERROR', {
-              requestId,
-              error: error.message
-            });
+          } catch (e) {
+            console.error('📡 Error processing response for tool calls:', e);
+            // Return the original response in case of error
+            return originalResponse;
           }
         })();
         
-        // Return the original response
-        return originalResponse;
+        // Store the response info for later
+        window._capturedResponses.push(responseInfo);
+        
+        // Wait for the promise to resolve and return the appropriate response
+        return await responsePromise;
       } else if (contentType.includes('application/json')) {
         try {
           const clonedResponse = originalResponse.clone();
@@ -415,7 +722,7 @@
     sendMessage('SHOW_LAST_RESPONSE', lastResponse);
     return lastResponse;
   };
-  
+    
   // Listen for messages from content script
   window.addEventListener('message', function(event) {
     if (event.source !== window) return;
@@ -429,5 +736,51 @@
   // Send startup message
   sendMessage('MONITOR_STARTED', { version: '1.0.0' });
   
-  console.log('📡 API Monitor active - use window.showLastResponse() to see captured data');
+  console.log('📡 API Monitor active with getCurrentTime tool support');
 })(); 
+
+// Add helper function to extract partial message from stream
+function extractPartialMessageFromStream(streamText) {
+  try {
+    // Initialize result structure
+    const result = {
+      content: ''
+    };
+    
+    // Parse the event stream
+    const lines = streamText.split('\n');
+    let currentData = '';
+    
+    // Process data lines
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      if (line.startsWith('data:') && line.length > 5) {
+        currentData = line.substring(5).trim();
+        
+        try {
+          // Try to parse as JSON
+          const data = JSON.parse(currentData);
+          
+          // Check for delta content
+          if (data.message?.content?.parts && data.message.content.parts[0]) {
+            result.content += data.message.content.parts[0];
+          } else if (data.choices && data.choices[0]?.delta?.content) {
+            result.content += data.choices[0].delta.content;
+          } else if (data.choices && data.choices[0]?.message?.content) {
+            result.content += data.choices[0].message.content;
+          } else if (data.p === '/message/content/parts/0' && data.o === 'append' && typeof data.v === 'string') {
+            result.content += data.v;
+          }
+        } catch (e) {
+          // Ignore parsing errors for initial chunks
+        }
+      }
+    }
+    
+    return result.content ? result : null;
+  } catch (e) {
+    console.error('Error extracting partial message:', e);
+    return null;
+  }
+} 
