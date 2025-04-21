@@ -13,18 +13,195 @@
     });
   }
   
-  // Store captured requests and responses
-  window._capturedRequests = [];
-  window._capturedResponses = [];
+  // State management
+  const state = {
+    authToken: null,
+    toolsConfigured: false,
+    lastConversationId: null,
+    lastToolCall: null,
+    extractedParameters: {}
+  };
   
-  // Tool handling
-  const TOOL_INSTRUCTIONS = `You have access to the following tools. When needed, use them by outputting the exact format: \`\`\`tool:toolName(param1, param2)\`\`\`
+  // Tool definitions - can be extended
+  const TOOLS_CONFIG = {
+    toolDefinitions: [
+      {
+        name: "getCurrentTime",
+        description: "Get the current date and time",
+        parameters: {}
+      },
+      {
+        name: "getWeather",
+        description: "Get current weather for a location",
+        parameters: {
+          location: {
+            type: "string",
+            description: "City name, e.g. 'San Francisco, CA'"
+          }
+        }
+      }
+    ]
+  };
+  
+  // Tool instruction for the system message with clear markers
+  const TOOL_SECTION_START = "<!-- CHATGPT-TOOLS-START -->";
+  const TOOL_SECTION_END = "<!-- CHATGPT-TOOLS-END -->";
+  
+  const TOOL_INSTRUCTIONS = `${TOOL_SECTION_START}
 
-getCurrentTime: Get the current date and time
+You have access to several tools that can help you answer user queries:
 
-For example, to get the current time, output: \`\`\`tool:getCurrentTime()\`\`\`
+${TOOLS_CONFIG.toolDefinitions.map(tool => {
+  let params = "";
+  if (tool.parameters && Object.keys(tool.parameters).length > 0) {
+    params = Object.entries(tool.parameters)
+      .map(([name, param]) => `- ${name}: ${param.description}`)
+      .join("\n");
+    params = `\nParameters:\n${params}`;
+  }
+  return `- ${tool.name}: ${tool.description}${params}`;
+}).join("\n\n")}
 
-When a user asks for information that requires one of these tools, use them.`;
+When you need to use a tool, respond in this exact format:
+[TOOL_CALL]
+{
+  "tool": "toolName",
+  "parameters": {
+    "param1": "value1"
+  }
+}
+[/TOOL_CALL]
+
+For example, to get the current time, respond with:
+[TOOL_CALL]
+{
+  "tool": "getCurrentTime",
+  "parameters": {}
+}
+[/TOOL_CALL]
+
+The user will execute the tool and provide you with the result. Then continue the conversation.
+
+${TOOL_SECTION_END}`;
+
+  // Detect custom tool calls in message content
+  function detectCustomToolCall(content) {
+    if (!content) return null;
+
+    try {
+      // Look for custom tool call syntax with [...] format
+      const toolCallMatch = content.match(/\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/);
+      
+      if (toolCallMatch && toolCallMatch[1]) {
+        const toolCallContent = toolCallMatch[1].trim();
+        
+        try {
+          // Try parsing as JSON
+          return JSON.parse(toolCallContent);
+        } catch (e) {
+          // If JSON parsing fails, try to extract tool and parameters manually
+          console.log('📡 JSON parsing failed, trying manual extraction');
+          
+          // Match the tool name
+          const toolMatch = toolCallContent.match(/\*\*Tool\*\*:\s*([^\n]+)/);
+          
+          // Match the parameters section
+          const paramsMatch = toolCallContent.match(/\*\*Parameters\*\*:\s*([\s\S]+)/);
+          
+          if (toolMatch && toolMatch[1] && paramsMatch && paramsMatch[1]) {
+            const toolName = toolMatch[1].trim();
+            const paramsText = paramsMatch[1].trim();
+            
+            // Parse parameters from the format:
+            // - param1: value1
+            // - param2: value2
+            const params = {};
+            
+            const paramLines = paramsText.split('\n');
+            for (const line of paramLines) {
+              // Match parameters in format "- name: value" or "name: value"
+              const paramMatch = line.match(/(?:-\s*)?([^:]+):\s*(.*)/);
+              if (paramMatch && paramMatch[1] && paramMatch[2]) {
+                const paramName = paramMatch[1].trim();
+                const paramValue = paramMatch[2].trim();
+                params[paramName] = paramValue;
+              }
+            }
+            
+            return {
+              tool: toolName,
+              parameters: params
+            };
+          }
+        }
+      }
+      
+      // Check for tool call in markdown format with ```antml:function_calls
+      const markdownMatch = content.match(/```antml:function_calls\s*([\s\S]*?)```/);
+      if (markdownMatch && markdownMatch[1]) {
+        const markdownContent = markdownMatch[1].trim();
+        
+        // Extract tool name from <invoke name="toolName">
+        const invokeMatch = markdownContent.match(/<invoke\s+name="([^"]+)">/);
+        if (invokeMatch && invokeMatch[1]) {
+          const toolName = invokeMatch[1].trim();
+          const params = {};
+          
+          // Extract parameters from <parameter name="paramName">paramValue</parameter>
+          const paramRegex = /<parameter\s+name="([^"]+)">([^<]*)<\/parameter>/g;
+          let paramMatch;
+          while ((paramMatch = paramRegex.exec(markdownContent)) !== null) {
+            const paramName = paramMatch[1].trim();
+            const paramValue = paramMatch[2].trim();
+            params[paramName] = paramValue;
+          }
+          
+          return {
+            tool: toolName,
+            parameters: params
+          };
+        }
+      }
+    } catch (e) {
+      console.error('📡 Error detecting custom tool call:', e);
+    }
+    
+    return null;
+  }
+  
+  // Check if a tool name is valid
+  function isValidTool(toolName) {
+    // Get all valid tool names from the tool definitions
+    const validTools = TOOLS_CONFIG.toolDefinitions.map(tool => tool.name);
+    return validTools.includes(toolName);
+  }
+  
+  // Execute tool calls
+  function executeToolCall(toolName, parameters) {
+    console.log(`📡 Executing tool: ${toolName} with parameters:`, parameters);
+    
+    // First validate the tool is defined
+    if (!isValidTool(toolName)) {
+      return `Error: Unknown tool '${toolName}'`;
+    }
+    
+    try {
+      if (toolName === 'getCurrentTime') {
+        const now = new Date();
+        return now.toISOString() + " (ISO format)\n" + 
+               now.toLocaleString() + " (Local time)";
+      } else if (toolName === 'getWeather') {
+        // Simple mock implementation
+        const location = parameters.location || 'Unknown location';
+        return `Weather for ${location}: Sunny, 22°C`;
+      }
+      
+      return `Error: Tool '${toolName}' is defined but not implemented`;
+    } catch (error) {
+      console.error(`📡 Error executing tool ${toolName}:`, error);
+      return `Error executing tool: ${error.message}`;
+    }
+  }
   
   // Send a message back to the content script
   function sendMessage(action, data) {
@@ -35,752 +212,710 @@ When a user asks for information that requires one of these tools, use them.`;
     }, '*');
   }
   
-  // Execute tool calls
-  function executeToolCall(toolName) {
-    console.log(`📡 Executing tool: ${toolName}`);
-    
-    if (toolName === 'getCurrentTime') {
-      return new Date().toISOString();
+  // Function to get the current system messages settings
+  async function getCurrentSystemSettings() {
+    if (!state.authToken) {
+      console.log("📡 No auth token available yet");
+      return null;
     }
     
-    return `Error: Unknown tool ${toolName}`;
-  }
-  
-  // Parse tool calls from assistant responses
-  function parseToolCalls(text) {
-    const toolCallRegex = /```tool:(\w+)\((.*?)\)```/g;
-    const matches = text.match(toolCallRegex);
-    
-    if (!matches) return null;
-    
-    // Extract the tool name
-    const match = /```tool:(\w+)\((.*?)\)```/.exec(text);
-    if (match) {
-      return {
-        toolName: match[1],
-        params: match[2]
-      };
+    try {
+      const response = await fetch("https://chatgpt.com/backend-api/user_system_messages", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": state.authToken
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get system settings: ${response.status}`);
+      }
+      
+      const settings = await response.json();
+      console.log("📡 Current system settings:", settings);
+      return settings;
+    } catch (error) {
+      console.error("📡 Error getting system settings:", error);
+      return null;
     }
-    
-    return null;
   }
   
-  // Monitor fetch at the lowest level possible
+  // Function to update system messages with our tool definitions
+  async function updateSystemSettingsWithTools() {
+    const currentSettings = await getCurrentSystemSettings();
+    if (!currentSettings) return false;
+    
+    try {
+      // Create a copy of the current settings
+      const updatedSettings = { ...currentSettings };
+      
+      // Update or set the traits message with our tool instructions
+      if (updatedSettings.traits_model_message) {
+        // Check if our section already exists
+        if (updatedSettings.traits_model_message.includes(TOOL_SECTION_START)) {
+          // Replace the existing section
+          const regex = new RegExp(`${TOOL_SECTION_START}[\\s\\S]*?${TOOL_SECTION_END}`, 'g');
+          updatedSettings.traits_model_message = updatedSettings.traits_model_message.replace(
+            regex, 
+            TOOL_INSTRUCTIONS
+          );
+          console.log("📡 Replaced existing tool section");
+        } else {
+          // Add our section at the end
+          updatedSettings.traits_model_message += "\n\n" + TOOL_INSTRUCTIONS;
+          console.log("📡 Added new tool section");
+        }
+      } else {
+        // No existing message, just use our tools
+        updatedSettings.traits_model_message = TOOL_INSTRUCTIONS;
+        console.log("📡 Created new traits message with tools");
+      }
+      
+      // Send the updated settings
+      const response = await fetch("https://chatgpt.com/backend-api/user_system_messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": state.authToken
+        },
+        body: JSON.stringify(updatedSettings)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to update system settings: ${response.status}`);
+      }
+      
+      console.log("📡 Successfully updated system settings with tool definitions");
+      state.toolsConfigured = true;
+      return true;
+    } catch (error) {
+      console.error("📡 Error updating system settings:", error);
+      return false;
+    }
+  }
+  
+  // Monitor fetch for auth token and responses
   const originalFetch = window.fetch;
   window.fetch = async function() {
     const url = arguments[0]?.url || arguments[0];
     const options = arguments[1] || {};
     
-    // Only intercept API calls
-    const isApiCall = typeof url === 'string' && (
-      url.includes('/backend-api/conversation') || 
-      url.includes('api.openai.com') ||
-      url.includes('/api/conversation')
-    );
-    
-    if (isApiCall) {
-      console.log('📡 API CALL DETECTED:', url);
-      
-      // Generate unique request ID
-      const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Capture request details
-      const requestInfo = {
-        requestId,
-        timestamp: new Date().toISOString(),
-        url,
-        method: options.method
-      };
-      
-      // Try to get the request body
-      if (options.body) {
-        console.log('📡 Raw body:', options.body);
-        
-        var originalRequest = '';
-        if (typeof options.body === 'string') {
-          try {
-            const parsedBody = JSON.parse(options.body);
-            console.log('📡 Parsed body:', parsedBody);
-            requestInfo.body = parsedBody;
-            
-            // Check if we have messages to modify
-            if (parsedBody.messages && Array.isArray(parsedBody.messages)) {
-              let modified = false;
-              
-              if (parsedBody.messages[0].author.role === 'user') {
-                console.log('📡 Prepending tool instructions to user message');
-                
-                // Prepend tool instructions to user message content
-                originalRequest = parsedBody.messages[0].content.parts[0];
-                parsedBody.messages[0].content.parts[0] = `${TOOL_INSTRUCTIONS}\n\nUser query: ${originalRequest}`;
-                modified = true;
-              }
-              
-              // If we modified the request, update the options.body
-              if (modified) {
-                console.log('📡 Modified request:', parsedBody);
-                options.body = JSON.stringify(parsedBody);
-                
-                // Update our arguments
-                if (typeof arguments[0] === 'string') {
-                  arguments[1] = options;
-                } else {
-                  arguments[0].body = options.body;
-                }
-              }
-            }
-            
-            // Send the request to content script
-            sendMessage('REQUEST', {
-              requestId,
-              url,
-              method: options.method,
-              body: parsedBody
-            });
-            
-            // Log messages
-            if (parsedBody.messages && Array.isArray(parsedBody.messages)) {
-              console.log('📡 Messages found:', parsedBody.messages.length);
-              
-              parsedBody.messages.forEach((msg, idx) => {
-                const role = msg.author?.role || 'unknown';
-                console.log(`📡 Message ${idx+1} [${role}]:`, 
-                  msg.content?.parts ? msg.content.parts.join('\n') : JSON.stringify(msg.content));
-              });
-              
-              // Send messages to content script
-              sendMessage('REQUEST_MESSAGES', {
-                requestId,
-                messages: parsedBody.messages
-              });
-            }
-          } catch (e) {
-            console.log('📡 Error parsing body:', e.message);
-          }
+    // Store auth token when we see it in a request
+    if (options.headers) {
+      // Try different possible auth header formats
+      const authHeader = options.headers.authorization || 
+                         options.headers.Authorization || 
+                         options.headers['authorization'] || 
+                         options.headers['Authorization'];
+                         
+      if (authHeader) {
+        if (state.authToken != authHeader) {
+          state.authToken = authHeader;
+          console.log('📡 Captured auth token, attempting to configure tools...');
+          setTimeout(updateSystemSettingsWithTools, 1000);
         }
       }
-      
-      // Store the request
-      window._capturedRequests.push(requestInfo);
-      
-      // Make the original request
-      const originalResponse = await originalFetch.apply(this, arguments);
-      console.log('📡 Response status:', originalResponse.status);
-      
-      // Create response info object
-      const responseInfo = {
-        requestId,
-        requestUrl: url,
-        timestamp: new Date().toISOString(),
-        status: originalResponse.status,
-        statusText: originalResponse.statusText
-      };
-      
-      // Send basic response info to content script
-      sendMessage('RESPONSE', {
-        requestId,
-        url,
-        status: originalResponse.status,
-        statusText: originalResponse.statusText
-      });
-      
-      // Check if it's a streaming response
-      const contentType = originalResponse.headers.get('content-type') || '';
-      if (contentType.includes('text/event-stream') || originalResponse.headers.get('transfer-encoding') === 'chunked') {
-        console.log('📡 Streaming response detected');
-        responseInfo.streaming = true;
-        
-        // Create a promise that will resolve with our final response
-        const responsePromise = (async () => {
-          try {
-            // Clone the response to analyze it
-            const clonedResponse = originalResponse.clone();
-            
-            // Check if the response contains a tool call
-            const reader = clonedResponse.body.getReader();
-            const decoder = new TextDecoder();
-            let earlyContent = '';
-            let fullText = '';
-            let toolFound = false;
-            let toolResult = null;
-            
-            // Read enough chunks to detect a potential tool call
-            for (let i = 0; i < 5 && !toolFound; i++) {
-              const { value, done } = await reader.read();
-              if (done) break;
-              
-              const chunk = decoder.decode(value, { stream: true });
-              earlyContent += chunk;
-              fullText += chunk;
-              
-              // Look for tool call pattern in early chunks
-              if (earlyContent.includes('tool:getCurrentTime()') || 
-                  earlyContent.includes('```tool:getCurrentTime()```')) {
-                console.log('📡 Tool call detected in early response chunks!');
-                toolFound = true;
-                
-                // Execute the tool
-                const result = executeToolCall('getCurrentTime');
-                toolResult = {
-                  toolName: 'getCurrentTime',
-                  result: result
-                };
-                
-                console.log('📡 Tool executed with result:', result);
-                break;
-              }
-              
-              // Try to extract message content from stream
-              if (earlyContent.includes('data:')) {
-                const earlyMessage = extractPartialMessageFromStream(earlyContent);
-                if (earlyMessage && earlyMessage.content) {
-                  // Check for tool call
-                  const toolCall = parseToolCalls(earlyMessage.content);
-                  if (toolCall && toolCall.toolName === 'getCurrentTime') {
-                    console.log('📡 Tool call detected in early parsed content:', toolCall);
-                    toolFound = true;
-                    
-                    // Execute the tool
-                    const result = executeToolCall(toolCall.toolName);
-                    toolResult = {
-                      toolName: toolCall.toolName, 
-                      result: result
-                    };
-                    
-                    console.log('📡 Tool executed with result:', result);
-                    break;
-                  }
-                }
-              }
-            }
-            
-            // If a tool call was found, make a new request with the result
-            if (toolFound && toolResult) {
-              console.log('📡 Making a new request with tool result');
-              
-              // Continue reading the original response in the background for logging
-              (async () => {
-                try {
-                  let done = false;
-                  while (!done) {
-                    const result = await reader.read();
-                    done = result.done;
-                    
-                    if (!done && result.value) {
-                      const chunk = decoder.decode(result.value, { stream: true });
-                      fullText += chunk;
-                    }
-                  }
-                  
-                  // Final decode
-                  const finalChunk = decoder.decode();
-                  if (finalChunk) fullText += finalChunk;
-                  
-                  console.log('📡 COMPLETE ORIGINAL RESPONSE (REPLACED):', fullText);
-                  responseInfo.originalStreamedText = fullText;
-                  
-                  // Extract and log the full message
-                  const assistantMessage = extractFullMessageFromStream(fullText);
-                  if (assistantMessage) {
-                    console.log('📡 ORIGINAL ASSISTANT MESSAGE (REPLACED):', assistantMessage);
-                    responseInfo.originalMessage = assistantMessage;
-                    
-                    // Send for logging purposes
-                    sendMessage('TOOL_CALL_REPLACED', {
-                      requestId,
-                      originalMessage: assistantMessage,
-                      toolResult: toolResult
-                    });
-                  }
-                } catch (e) {
-                  console.error('📡 Error reading complete original response:', e);
-                }
-                await new Promise(resolve => setTimeout(resolve, 3000));
-              })();
-              
-              try {
-                // Deep clone the original request
-                const newOptions = JSON.parse(JSON.stringify(options));
-                const newBody = JSON.parse(newOptions.body);
-                
-                // Add the tool result as a new message
-                newBody.messages[0].content.parts[0] = `I executed the tool you requested.\n\nTool: ${toolResult.toolName}\nResult: ${toolResult.result}\n\nOriginal request: ${originalRequest}`;
-                newBody.messages[0].create_time+=3;
-                newBody.messages[0].id=uuidv4();
-                console.log('📡 New body:', newBody);
-
-                
-                newOptions.body = JSON.stringify(newBody);
-                console.log('📡 New options:', newOptions);
-                
-                
-                // Update our arguments
-                if (typeof arguments[0] === 'string') {
-                  arguments[1] = newOptions;
-                } else {
-                  arguments[0].body = newOptions.body;
-                }
-
-                // Make the new request
-                console.log('📡 Sending follow-up request with tool result, arguments:', arguments);
-                
-                // Use a safer approach to make the follow-up request
-                let newResponse;
-                try {
-                  // Create a clean version of the options without problematic properties
-                  const safeOptions = {
-                    method: newOptions.method,
-                    headers: newOptions.headers,
-                    body: newOptions.body,
-                    credentials: newOptions.credentials
-                  };
-                  
-                  // Make the request with the clean options
-                  newResponse = await originalFetch.apply(this, [url, safeOptions]);
-                } catch (fetchError) {
-                  console.error('📡 Error with clean fetch, trying original method:', fetchError);
-                  
-                  // Try the original approach as fallback
-                  newResponse = await originalFetch.apply(this, arguments);
-                }
-                
-                // Log information about the new response
-                console.log('📡 Received follow-up response:', newResponse.status);
-                
-                // Start reading the new response stream for logging
-                const newClonedResponse = newResponse.clone();
-                const newReader = newClonedResponse.body.getReader();
-                
-                // Log the new response in the background
-                (async () => {
-                  try {
-                    let newFullText = '';
-                    let done = false;
-                    
-                    while (!done) {
-                      const result = await newReader.read();
-                      done = result.done;
-                      
-                      if (!done && result.value) {
-                        const chunk = decoder.decode(result.value, { stream: true });
-                        newFullText += chunk;
-                      }
-                    }
-                    
-                    // Final decode
-                    const finalChunk = decoder.decode();
-                    if (finalChunk) newFullText += finalChunk;
-                    
-                    console.log('📡 COMPLETE TOOL RESULT RESPONSE:', newFullText);
-                    responseInfo.toolResultStreamedText = newFullText;
-                    
-                    // Extract and log the follow-up message
-                    const followUpMessage = extractFullMessageFromStream(newFullText);
-                    if (followUpMessage) {
-                      console.log('📡 TOOL RESULT ASSISTANT MESSAGE:', followUpMessage);
-                      responseInfo.toolResultMessage = followUpMessage;
-                      
-                      // Send for logging
-                      sendMessage('TOOL_RESULT_RESPONSE', {
-                        requestId,
-                        message: followUpMessage
-                      });
-                    }
-                  } catch (e) {
-                    console.error('📡 Error reading tool result response:', e);
-                  }
-                })();
-                
-                // Update the response info
-                responseInfo.toolExecuted = true;
-                responseInfo.toolResult = toolResult;
-                responseInfo.replacedWithToolResponse = true;
-                
-                return newResponse;
-              } catch (e) {
-                console.error('📡 Error making follow-up request:', e);
-                // Fall back to the original response if the new request fails
-                return originalResponse;
-              }
-            } else {
-              // No tool call found, set up streaming for the original response
-              
-              // Create a transform stream to pass through the original response
-              // while also logging it completely
-              const { readable, writable } = new TransformStream();
-              const newResponse = new Response(readable, originalResponse);
-              
-              // Process the original response in the background
-              (async () => {
-                try {
-                  const writer = writable.getWriter();
-                  // Reset the reader since we already consumed some chunks
-                  const originalReader = originalResponse.body.getReader();
-                  
-                  // First write the chunks we already read
-                  if (fullText) {
-                    await writer.write(new TextEncoder().encode(fullText));
-                  }
-                  
-                  // Continue reading and passing through
-                  let done = false;
-                  while (!done) {
-                    const result = await originalReader.read();
-                    done = result.done;
-                    
-                    if (!done && result.value) {
-                      const chunk = decoder.decode(result.value, { stream: true });
-                      fullText += chunk;
-                      await writer.write(result.value);
-                    }
-                  }
-                  
-                  // Final decode
-                  const finalChunk = decoder.decode();
-                  if (finalChunk) {
-                    fullText += finalChunk;
-                    if (finalChunk.length > 0) {
-                      await writer.write(new TextEncoder().encode(finalChunk));
-                    }
-                  }
-                  
-                  // Close the writer
-                  await writer.close();
-                  
-                  console.log('📡 COMPLETE STREAMED RESPONSE:', fullText);
-                  responseInfo.streamedText = fullText;
-                  
-                  // Extract and log the message
-                  const assistantMessage = extractFullMessageFromStream(fullText);
-                  if (assistantMessage) {
-                    console.log('📡 ASSISTANT MESSAGE:', assistantMessage);
-                    responseInfo.message = assistantMessage;
-                    
-                    // Send the extracted message to content script
-                    sendMessage('ASSISTANT_MESSAGE', assistantMessage);
-                  }
-                } catch (e) {
-                  console.error('📡 Error processing stream:', e);
-                  try {
-                    writable.getWriter().close();
-                  } catch (err) {}
-                }
-              })();
-              
-              return newResponse;
-            }
-          } catch (e) {
-            console.error('📡 Error processing response for tool calls:', e);
-            // Return the original response in case of error
-            return originalResponse;
-          }
-        })();
-        
-        // Store the response info for later
-        window._capturedResponses.push(responseInfo);
-        
-        // Wait for the promise to resolve and return the appropriate response
-        return await responsePromise;
-      } else if (contentType.includes('application/json')) {
-        try {
-          const clonedResponse = originalResponse.clone();
-          const jsonData = await clonedResponse.json();
-          
-          console.log('📡 Response body (JSON):', jsonData);
-          responseInfo.body = jsonData;
-          
-          // Send JSON response to content script
-          sendMessage('JSON_RESPONSE', {
-            requestId,
-            body: jsonData
-          });
-        } catch (e) {
-          console.log('📡 Error parsing JSON response:', e.message);
-        }
-      } else if (contentType.includes('text/')) {
-        try {
-          const clonedResponse = originalResponse.clone();
-          const text = await clonedResponse.text();
-          
-          responseInfo.text = text;
-          console.log('📡 Response text:', text.substring(0, 500) + 
-            (text.length > 500 ? '...' : ''));
-          
-          // Send text response to content script
-          sendMessage('TEXT_RESPONSE', {
-            requestId,
-            text: text.substring(0, 1000) + (text.length > 1000 ? '...[truncated]' : '')
-          });
-        } catch (e) {
-          console.log('📡 Error reading text response:', e.message);
-        }
-      }
-      
-      // Store the response if not already stored
-      if (!responseInfo.streaming) {
-        window._capturedResponses.push(responseInfo);
-      }
-      
-      return originalResponse;
     }
     
-    // For non-API calls, just use the original fetch
-    return originalFetch.apply(this, arguments);
+    // Capture conversation ID from requests
+    if (options.body && typeof url === 'string' && url.includes('/backend-api/conversation')) {
+      try {
+        const parsedBody = JSON.parse(options.body);
+        if (parsedBody.conversation_id) {
+          state.lastConversationId = parsedBody.conversation_id;
+          console.log('📡 Captured conversation ID:', state.lastConversationId);
+        }
+      } catch (e) {
+        // Ignore parsing errors
+      }
+    }
+      
+    // Make the original request
+    const originalResponse = await originalFetch.apply(this, arguments);
+    
+    // Process chat responses to detect tool calls
+    if (typeof url === 'string' && url.includes('/backend-api/conversation')) {
+      const contentType = originalResponse.headers.get('content-type') || '';
+      
+      if (contentType.includes('text/event-stream')) {
+        // Clone the response to process it
+        const clonedResponse = originalResponse.clone();
+        
+        // Create a transform stream to pass through the original response
+        const { readable, writable } = new TransformStream();
+        const newResponse = new Response(readable, originalResponse);
+        
+        // Process the stream in the background
+        processStreamForToolCalls(clonedResponse.body, writable);
+        
+        return newResponse;
+      }
+    }
+    
+    return originalResponse;
   };
   
-  // Improved message extractor that handles all formats and extracts all fields
-  function extractFullMessageFromStream(text) {
+  // Extract message content and metadata from chunks
+  function getContentFromChunks(buffer) {
+    if (!buffer) return { content: '' };
+    
+    const result = {
+      content: '',
+      conversation_id: null,
+      message_id: null,
+      status: null,
+      end_turn: null,
+      model: null,
+      metadata: {},
+      raw_events: []
+    };
+    
     try {
-      // Initialize result structure
-      const result = {
-        requestId: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        content: '',
-        messageId: '',
-        metadata: {},
-        author: {},
-        createTime: null,
-        status: null,
-        endTurn: null
-      };
+      // Split the buffer into events (separated by double newlines)
+      const events = buffer.split('\n\n').filter(e => e.trim());
       
-      // Parse the event stream
-      const events = [];
-      const lines = text.split('\n');
-      let currentEvent = null;
-      let currentData = '';
+      // Store raw events for debugging
+      result.raw_events = events.map(e => e.trim());
+      console.log(`📡 Processing ${events.length} events`);
       
-      // First parse all the events
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
+      // Process each event
+      for (const event of events) {
+        // Skip empty events
+        if (!event.trim()) continue;
         
-        if (line === '') {
-          // Empty line indicates end of an event
-          if (currentEvent && currentData) {
-            events.push({
-              event: currentEvent,
-              data: currentData
-            });
-            
-            // Reset for next event
-            currentEvent = null;
-            currentData = '';
-          }
-        } else if (line.startsWith('event:')) {
-          currentEvent = line.substring(6).trim();
-        } else if (line.startsWith('data:')) {
-          currentData = line.substring(5).trim();
-        }
-      }
-      
-      // Add the last event if there is one
-      if (currentEvent && currentData) {
-        events.push({
-          event: currentEvent,
-          data: currentData
-        });
-      }
-      
-      // Process the initial delta event to extract message structure
-      for (const event of events) {
-        if (event.event === 'delta') {
-          try {
-            const data = JSON.parse(event.data);
-            
-            // Find the initial message with all fields
-            if (data.p === '' && data.o === 'add' && data.v && data.v.message) {
-              const message = data.v.message;
+        // Determine event type
+        const eventTypeMatch = event.match(/^event: (.+)$/m);
+        const eventType = eventTypeMatch ? eventTypeMatch[1].trim() : null;
+        
+        // Extract data payload
+        const dataMatch = event.match(/^data: (.+)$/m);
+        if (!dataMatch) continue;
+        
+        const dataStr = dataMatch[1].trim();
+        if (dataStr === '[DONE]') continue; // End marker
+        
+        try {
+          // Parse data as JSON
+          const data = JSON.parse(dataStr);
+          
+          // Debug: log event type and key data properties
+          console.log(`📡 Event type: ${eventType}, operation: ${data.o}, path: ${data.p}`);
+          
+          // Process based on event type
+          switch (eventType) {
+            case 'delta_encoding':
+              // Just a version marker, nothing to extract
+              break;
               
-              // Capture all available fields
-              if (message.id) result.messageId = message.id;
-              if (message.author) result.author = message.author;
-              if (message.create_time) result.createTime = message.create_time;
-              if (message.status) result.status = message.status;
-              if (message.end_turn !== undefined) result.endTurn = message.end_turn;
-              if (message.metadata) result.metadata = message.metadata;
-              
-              // Get initial content if available
-              if (message.content && message.content.parts && message.content.parts[0]) {
-                result.content = message.content.parts[0];
-              }
-              
-              // Extract other fields that might be useful
-              if (message.weight) result.weight = message.weight;
-              if (message.recipient) result.recipient = message.recipient;
-              if (message.channel) result.channel = message.channel;
-              
-              // Also capture conversation ID if available
-              if (data.v.conversation_id) {
-                result.conversationId = data.v.conversation_id;
-              }
-              
-              break; // First message is enough for structure
-            }
-          } catch (e) {
-            console.log('Error parsing initial delta event:', e);
-          }
-        }
-      }
-      
-      // Now process all events to build the content
-      for (const event of events) {
-        if (event.event === 'delta') {
-          try {
-            const data = JSON.parse(event.data);
-            
-            // Different content append patterns
-            if (data.p === '/message/content/parts/0' && data.o === 'append' && typeof data.v === 'string') {
-              result.content += data.v;
-            }
-            else if (typeof data.v === 'string') {
-              result.content += data.v;
-            }
-            else if (data.p === '' && data.o === 'patch' && Array.isArray(data.v)) {
-              // Process patches
-              for (const patch of data.v) {
-                if (patch.p === '/message/content/parts/0' && patch.o === 'append' && typeof patch.v === 'string') {
-                  result.content += patch.v;
+            case 'delta':
+              // Handle different types of delta events
+              if (data.p === '' && data.o === 'add' && data.v) {
+                // Initial message event
+                if (data.v.message) {
+                  if (data.v.message.id) {
+                    result.message_id = data.v.message.id;
+                  }
+                  
+                  if (data.v.message.status) {
+                    result.status = data.v.message.status;
+                  }
+                  
+                  if (data.v.message.end_turn !== undefined) {
+                    result.end_turn = data.v.message.end_turn;
+                  }
+                  
+                  if (data.v.message.metadata) {
+                    result.metadata = { ...result.metadata, ...data.v.message.metadata };
+                    if (data.v.message.metadata.model_slug) {
+                      result.model = data.v.message.metadata.model_slug;
+                    }
+                  }
+                  
+                  // Initial content if any
+                  if (data.v.message.content && data.v.message.content.parts) {
+                    result.content = data.v.message.content.parts[0] || '';
+                  }
                 }
                 
-                // Update message status if it changes
-                if (patch.p === '/message/status' && patch.o === 'replace') {
-                  result.status = patch.v;
+                // Extract conversation ID
+                if (data.v.conversation_id) {
+                  result.conversation_id = data.v.conversation_id;
                 }
-                
-                // Update end_turn if it changes
-                if (patch.p === '/message/end_turn' && patch.o === 'replace') {
-                  result.endTurn = patch.v;
-                }
-                
-                // Update metadata if it's appended
-                if (patch.p === '/message/metadata' && patch.o === 'append' && typeof patch.v === 'object') {
-                  result.metadata = {...result.metadata, ...patch.v};
+              } else if (data.p === '/message/content/parts/0' && data.o === 'append' && typeof data.v === 'string') {
+                // Content append with explicit path
+                console.log(`📡 Appending content with path: "${data.v}"`);
+                result.content += data.v;
+              } else if (data.v && typeof data.v === 'string' && !data.p) {
+                // Content append without path (simplified delta)
+                console.log(`📡 Appending content without path: "${data.v}"`);
+                result.content += data.v;
+              } else if (data.o === 'patch' && Array.isArray(data.v)) {
+                // Process patch array
+                console.log(`📡 Processing patch with ${data.v.length} operations`);
+                for (const patch of data.v) {
+                  if (patch.p === '/message/content/parts/0' && patch.o === 'append' && typeof patch.v === 'string') {
+                    console.log(`📡 Patch appending: "${patch.v}"`);
+                    result.content += patch.v;
+                  } else if (patch.p === '/message/status' && patch.o === 'replace') {
+                    result.status = patch.v;
+                  } else if (patch.p === '/message/end_turn' && patch.o === 'replace') {
+                    result.end_turn = patch.v;
+                  } else if (patch.p === '/message/metadata' && patch.o === 'append') {
+                    result.metadata = { ...result.metadata, ...patch.v };
+                  }
                 }
               }
-            }
-          } catch (e) {
-            console.log('Error processing delta event:', e);
+              break;
+              
+            default:
+              // Handle non-delta events
+              if (data.type === 'message_stream_complete' && data.conversation_id) {
+                result.conversation_id = data.conversation_id;
+              } else if (data.type === 'conversation_detail_metadata') {
+                if (data.conversation_id) {
+                  result.conversation_id = data.conversation_id;
+                }
+                if (data.default_model_slug) {
+                  result.model = data.default_model_slug;
+                }
+              } else if (data.type === 'title_generation' && data.title) {
+                result.title = data.title;
+              }
+              break;
           }
-        }
-        else if (event.data && !event.event) {
-          // Handle the messages without an event type
-          try {
-            const data = JSON.parse(event.data);
-            
-            // Capture metadata from non-delta events
-            if (data.type === 'message_stream_complete' && data.conversation_id) {
-              result.conversationId = data.conversation_id;
-            }
-            else if (data.type === 'conversation_detail_metadata') {
-              result.conversationMetadata = data;
-            }
-          } catch (e) {
-            // Ignore parsing errors for non-delta events
-          }
+        } catch (e) {
+          // Handle non-JSON data
+          console.log('📡 Non-JSON data in event:', dataStr);
         }
       }
       
-      // Only return if we have at least a message ID or content
-      return (result.messageId || result.content) ? result : null;
+      // Log final content for debugging
+      console.log(`📡 Final content (${result.content.length} chars): "${result.content.substring(0, 50)}..."`);
+      
+      return result;
     } catch (e) {
-      console.error('Error extracting full message:', e);
-      return null;
+      console.error('📡 Error extracting content from chunks:', e);
+      return { content: result.content || '', raw_events: result.raw_events };
     }
   }
   
-  // Helper functions
-  window.showLastRequest = function() {
-    if (window._capturedRequests.length === 0) {
-      console.log('No requests captured');
-      return null;
-    }
+  // Check for tool calls in the content
+  function checkForToolCalls(content, messageId) {
+    if (!content) return null;
     
-    const lastRequest = window._capturedRequests[window._capturedRequests.length - 1];
-    console.log('LAST REQUEST:', lastRequest);
-    sendMessage('SHOW_LAST_REQUEST', lastRequest);
-    return lastRequest;
-  };
-  
-  window.showLastResponse = function() {
-    if (window._capturedResponses.length === 0) {
-      console.log('No responses captured');
-      return null;
-    }
-    
-    const lastResponse = window._capturedResponses[window._capturedResponses.length - 1];
-    console.log('LAST RESPONSE:', lastResponse);
-    
-    if (lastResponse.streaming && lastResponse.streamedText) {
-      console.log('STREAMED TEXT:');
-      console.log(lastResponse.streamedText);
+    try {
+      // Use the detectCustomToolCall function to find tool calls
+      const customToolCall = detectCustomToolCall(content);
       
-      if (lastResponse.message) {
-        console.log('EXTRACTED MESSAGE:');
-        console.log(lastResponse.message);
+      if (customToolCall) {
+        console.log('📡 Tool call detected in content:', customToolCall);
+        
+        // Store extracted parameters
+        state.extractedParameters = customToolCall.parameters;
+        
+        // Save info for later use
+        state.lastToolCall = {
+          toolName: customToolCall.tool,
+          parameters: customToolCall.parameters,
+          messageId: messageId,
+          type: 'custom',
+          extractedParameters: customToolCall.parameters
+        };
+        
+        return customToolCall;
+      }
+    } catch (e) {
+      console.error('📡 Error checking for tool calls:', e);
+    }
+    
+    return null;
+  }
+  
+  // Process streaming responses for tool calls
+  async function processStreamForToolCalls(inputStream, outputWriter) {
+    const reader = inputStream.getReader();
+    const writer = outputWriter.getWriter();
+    const decoder = new TextDecoder();
+    
+    let buffer = '';
+    let messageId = '';
+    let content = '';
+    let chunk = '';
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        // Pass through the chunk to the original consumer
+        if (value) {
+          await writer.write(value);
+        }
+        // Process the next chunk
+        if (value) {
+          chunk = decoder.decode(value, { stream: true });
+          buffer += chunk;
+        }
+        
+        if (done) {
+          console.log('📡 Stream complete, processing accumulated content');
+          
+          // Process the complete accumulated content
+          const contentResult = getContentFromChunks(buffer);
+          content = contentResult.content;
+
+          // Use extracted metadata from contentResult
+          if (contentResult.conversation_id) {
+            state.lastConversationId = contentResult.conversation_id;
+            console.log('📡 Captured conversation ID:', state.lastConversationId);
+          }
+          
+          if (contentResult.message_id) {
+            messageId = contentResult.message_id;
+            console.log('📡 Captured message ID:', messageId);
+          }
+          
+          console.log('📡 Extracted message data:', {
+            conversation_id: contentResult.conversation_id,
+            message_id: contentResult.message_id,
+            status: contentResult.status,
+            end_turn: contentResult.end_turn,
+            model: contentResult.model
+          });
+          
+          // Store the full result in state for later access
+          state.lastMessageData = contentResult;
+          
+          const result = checkForToolCalls(content, messageId);
+          if (result) {
+            // Perform the tool call
+            const toolCallResult = executeToolCall(result.tool, result.parameters);
+            // Inject the tool call result into the UI
+            injectToolResultButton(result, toolCallResult);
+          }
+          
+          break;
+        }
+      }
+    } catch (e) {
+      console.error('📡 Error processing stream:', e);
+    } finally {
+      await writer.close();
+    }
+    
+    return state.lastMessageData;
+  }
+  
+  // Inject a button into the UI to send the tool result
+  function injectToolResultButton(toolCall, result) {
+    try {
+      // Find the latest message container
+      const messageContainers = document.querySelectorAll('[data-message-author-role="assistant"]');
+      if (messageContainers.length === 0) return;
+      
+      const latestMessage = messageContainers[messageContainers.length - 1];
+      
+      // Check if we already injected a button
+      if (latestMessage.querySelector('.tool-result-button')) return;
+      
+      // For native tool calls, we want to check if there's already a built-in button
+      if (toolCall.type === 'native') {
+        // Check for existing "Run" button or similar UI elements
+        const existingButtons = latestMessage.querySelectorAll('button');
+        for (const btn of existingButtons) {
+          if (btn.textContent.includes('Run') || btn.textContent.toLowerCase().includes('tool')) {
+            console.log('📡 Found native tool UI, not injecting button');
+            
+            // Just store the tool result for later manual submission
+            state.lastToolCall = {
+              toolName: toolCall.tool,
+              parameters: toolCall.parameters,
+              result: result,
+              messageId: state.lastToolCall?.messageId
+            };
+            
+            return;
+          }
+        }
+      }
+      
+      // Format the message that will be sent
+      const resultMessage = `Tool result for ${toolCall.tool}:\n\n${result}`;
+      
+      // Create tooltip element
+      const tooltip = document.createElement('div');
+      tooltip.className = 'tool-result-tooltip';
+      tooltip.textContent = resultMessage;
+      tooltip.style.cssText = `
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #333;
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 14px;
+        max-width: 300px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        opacity: 0;
+        transition: opacity 0.2s;
+        pointer-events: none;
+        margin-bottom: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+        text-align: left;
+      `;
+      
+      // Create button
+      const button = document.createElement('button');
+      button.className = 'tool-result-button';
+      button.textContent = `Send result for ${toolCall.tool}`;
+      button.style.cssText = `
+        background-color: #10a37f;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 16px;
+        margin-top: 10px;
+        cursor: pointer;
+        font-size: 14px;
+        position: relative;
+      `;
+      
+      // Add tooltip functionality
+      button.addEventListener('mouseenter', () => {
+        tooltip.style.opacity = '1';
+      });
+      
+      button.addEventListener('mouseleave', () => {
+        tooltip.style.opacity = '0';
+      });
+      
+      // Add click handler
+      button.addEventListener('click', () => {
+        sendToolResult(toolCall, result);
+        button.disabled = true;
+        button.textContent = 'Result sent!';
+        button.style.backgroundColor = '#666';
+        tooltip.textContent = 'Result sent!';
+      });
+      
+      // Append tooltip to button
+      button.appendChild(tooltip);
+      
+      // Append button to message
+      latestMessage.appendChild(button);
+    } catch (e) {
+      console.error('📡 Error injecting button:', e);
+    }
+  }
+  
+  // Send the tool result as a new user message through the UI
+  async function sendToolResult(toolCall, result) {
+    try {
+      console.log('📡 Sending tool result via UI for:', toolCall.tool);
+      
+      // Find the contenteditable div that serves as the input field
+      const inputElement = document.querySelector('div[contenteditable="true"]#prompt-textarea') || 
+                           document.querySelector('div[contenteditable="true"]');
+                              
+      if (!inputElement) {
+        console.error('📡 Could not find contenteditable input element');
+        injectErrorMessage('Could not find input field to send tool result. Try sending manually.');
+        return fallbackSendToolResult(toolCall, result);
+      }
+      
+      // Format the result message
+      const resultMessage = `Tool result for ${toolCall.tool}:\n\n${result}`;
+      
+      // Clear any placeholder text by focusing first
+      inputElement.focus();
+      
+      // Input the message into the contenteditable div
+      inputElement.textContent = resultMessage;
+      
+      // Trigger input event to make ChatGPT recognize the content
+      inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+      
+      // Use a slight delay to ensure the UI has updated
+      setTimeout(() => {
+        // Simulate pressing Enter to send the message
+        inputElement.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter',
+          code: 'Enter',
+          keyCode: 13,
+          which: 13,
+          bubbles: true
+        }));
+        
+        console.log('📡 Simulated Enter key to send tool result');
+      }, 100);
+      
+      console.log('📡 Tool result submission initiated');
+    } catch (e) {
+      console.error('📡 Error sending tool result via UI:', e);
+      injectErrorMessage(`Error sending tool result: ${e.message}`);
+      
+      // Fall back to API if UI method fails
+      fallbackSendToolResult(toolCall, result);
+    }
+  }
+  
+  // Fallback method using API if UI interaction fails
+  async function fallbackSendToolResult(toolCall, result) {
+    console.log('📡 Falling back to API method for sending tool result');
+    
+    // Try to get the auth token from cookies if not already available
+    if (!state.authToken) {
+      try {
+        console.log('📡 Auth token not available, trying to extract from cookies...');
+        const cookies = document.cookie.split(';');
+        for (const cookie of cookies) {
+          const [name, value] = cookie.trim().split('=');
+          if (name === '__Secure-next-auth.session-token') {
+            state.authToken = `Bearer ${value}`;
+            console.log('📡 Successfully extracted auth token from cookies');
+            break;
+          }
+        }
+      } catch (e) {
+        console.error('📡 Error extracting auth token from cookies:', e);
       }
     }
     
-    sendMessage('SHOW_LAST_RESPONSE', lastResponse);
-    return lastResponse;
-  };
+    if (!state.authToken) {
+      console.error('📡 No auth token available for sending tool result');
+      // Show a message to the user
+      injectErrorMessage('Cannot send tool result: Authentication token not available. Try refreshing the page.');
+      return;
+    }
+    
+    if (!state.lastConversationId) {
+      console.error('📡 No conversation ID available');
+      injectErrorMessage('Cannot send tool result: Conversation ID not available. Try refreshing the page.');
+      return;
+    }
+    
+    try {
+      const toolResultMessage = {
+        action: "next",
+        messages: [
+          {
+            id: uuidv4(),
+            author: { role: "user" },
+            content: {
+              content_type: "text",
+              parts: [`Tool result for ${toolCall.tool}:\n\n${result}`]
+            },
+            metadata: { }
+          }
+        ],
+        conversation_id: state.lastConversationId,
+        parent_message_id: state.lastToolCall?.messageId || uuidv4(),
+        model: "auto"
+      };
+      
+      console.log('📡 Sending tool result message via API:', toolResultMessage);
+      
+      // Send the message
+      const response = await originalFetch('https://chatgpt.com/backend-api/conversation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': state.authToken
+        },
+        body: JSON.stringify(toolResultMessage)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to send tool result: ${response.status} ${response.statusText}`);
+      }
+      
+      console.log('📡 Tool result sent successfully via API');
+    } catch (e) {
+      console.error('📡 Error sending tool result via API:', e);
+      injectErrorMessage(`Error sending tool result: ${e.message}`);
+    }
+  }
+  
+  // Inject an error message into the UI
+  function injectErrorMessage(message) {
+    try {
+      // Create error message element
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'tool-error-message';
+      errorDiv.textContent = message;
+      errorDiv.style.cssText = 
+        'background-color: #f8d7da;' +
+        'color: #721c24;' +
+        'padding: 10px;' +
+        'margin: 10px 0;' +
+        'border-radius: 4px;' +
+        'border: 1px solid #f5c6cb;' +
+        'font-size: 14px;';
+      
+      // Find the chat content area to inject the message
+      const chatContainer = document.querySelector('[role="main"]');
+      if (chatContainer) {
+        chatContainer.prepend(errorDiv);
+        
+        // Auto-remove after 10 seconds
+        setTimeout(() => {
+          try {
+            errorDiv.remove();
+          } catch (e) {}
+        }, 10000);
+      }
+    } catch (e) {
+      console.error('📡 Error injecting error message:', e);
+    }
+  }
     
   // Listen for messages from content script
   window.addEventListener('message', function(event) {
     if (event.source !== window) return;
     
     if (event.data && event.data.type === 'API_MONITOR_CHECK') {
-      console.log('📡 Monitor script received message:', event.data.action);
       sendMessage('LOADED', { timestamp: new Date().toISOString() });
     }
   });
   
+  // Expose helper functions to the window object
+  window.sendManualToolResult = function(toolName, result) {
+    if (!state.lastToolCall) {
+      console.error('📡 No tool call information available');
+      return;
+    }
+    
+    const toolCall = {
+      tool: toolName || state.lastToolCall.toolName,
+      parameters: state.lastToolCall.parameters
+    };
+    
+    sendToolResult(toolCall, result || state.lastToolCall.result);
+  };
+  
+  window.configureTools = updateSystemSettingsWithTools;
+  
+  window.addNewTool = function(name, description, parameters = {}) {
+    TOOLS_CONFIG.toolDefinitions.push({
+      name,
+      description,
+      parameters
+    });
+    
+    console.log(`📡 Added new tool: ${name}`);
+    return updateSystemSettingsWithTools();
+  };
+  
+  // Add function to get extracted parameters
+  window.getExtractedParameters = function() {
+    return state.extractedParameters || state.lastToolCall?.extractedParameters || {};
+  };
+  
   // Send startup message
   sendMessage('MONITOR_STARTED', { version: '1.0.0' });
   
-  console.log('📡 API Monitor active with getCurrentTime tool support');
+  console.log('📡 API Monitor active - direct system configuration');
 })(); 
-
-// Add helper function to extract partial message from stream
-function extractPartialMessageFromStream(streamText) {
-  try {
-    // Initialize result structure
-    const result = {
-      content: ''
-    };
-    
-    // Parse the event stream
-    const lines = streamText.split('\n');
-    let currentData = '';
-    
-    // Process data lines
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      
-      if (line.startsWith('data:') && line.length > 5) {
-        currentData = line.substring(5).trim();
-        
-        try {
-          // Try to parse as JSON
-          const data = JSON.parse(currentData);
-          
-          // Check for delta content
-          if (data.message?.content?.parts && data.message.content.parts[0]) {
-            result.content += data.message.content.parts[0];
-          } else if (data.choices && data.choices[0]?.delta?.content) {
-            result.content += data.choices[0].delta.content;
-          } else if (data.choices && data.choices[0]?.message?.content) {
-            result.content += data.choices[0].message.content;
-          } else if (data.p === '/message/content/parts/0' && data.o === 'append' && typeof data.v === 'string') {
-            result.content += data.v;
-          }
-        } catch (e) {
-          // Ignore parsing errors for initial chunks
-        }
-      }
-    }
-    
-    return result.content ? result : null;
-  } catch (e) {
-    console.error('Error extracting partial message:', e);
-    return null;
-  }
-} 
