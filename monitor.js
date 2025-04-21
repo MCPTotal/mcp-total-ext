@@ -638,34 +638,97 @@ ${TOOL_SECTION_END}`;
         }
       }
       
+      // Find the tool call text to replace
+      let toolCallElement = null;
+      const markdownElements = latestMessage.querySelectorAll('.markdown p, .prose p');
+      
+      for (const element of markdownElements) {
+        const text = element.textContent || '';
+        if (text.includes('[TOOL_CALL]') && text.includes('[/TOOL_CALL]')) {
+          toolCallElement = element;
+          break;
+        }
+      }
+      
+      if (!toolCallElement) {
+        console.log('📡 Could not find tool call text element, appending button instead');
+        // If we can't find the element, fall back to appending the button
+        appendToolResultButton(latestMessage, toolCall, result);
+        return;
+      }
+      
       // Format the message that will be sent
       const resultMessage = `Tool result for ${toolCall.tool}:\n\n${result}`;
+      
+      // Create container for better positioning
+      const container = document.createElement('div');
+      container.style.cssText = `
+        position: relative;
+        margin-top: 8px;
+        display: inline-block;
+      `;
       
       // Create tooltip element
       const tooltip = document.createElement('div');
       tooltip.className = 'tool-result-tooltip';
-      tooltip.textContent = resultMessage;
       tooltip.style.cssText = `
         position: absolute;
         bottom: 100%;
         left: 50%;
         transform: translateX(-50%);
-        background-color: #333;
-        color: white;
-        padding: 8px 12px;
-        border-radius: 6px;
-        font-size: 14px;
+        background-color: #202123;
+        color: #fff;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 13px;
         max-width: 300px;
         white-space: pre-wrap;
         word-break: break-word;
         opacity: 0;
-        transition: opacity 0.2s;
+        visibility: hidden;
+        transition: opacity 0.2s, visibility 0.2s;
         pointer-events: none;
-        margin-bottom: 8px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        margin-bottom: 10px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
         z-index: 1000;
         text-align: left;
+        border: 1px solid rgba(255, 255, 255, 0.1);
       `;
+      
+      // Create message preview in the tooltip
+      const previewHeader = document.createElement('div');
+      previewHeader.textContent = 'Message preview:';
+      previewHeader.style.cssText = `
+        font-weight: 600;
+        margin-bottom: 6px;
+        color: #8e8ea0;
+        font-size: 12px;
+      `;
+      
+      const previewContent = document.createElement('div');
+      previewContent.textContent = resultMessage;
+      previewContent.style.cssText = `
+        font-family: var(--font-family-sans);
+        line-height: 1.5;
+      `;
+      
+      tooltip.appendChild(previewHeader);
+      tooltip.appendChild(previewContent);
+      
+      // Add tooltip arrow
+      const arrow = document.createElement('div');
+      arrow.style.cssText = `
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 0;
+        border-left: 8px solid transparent;
+        border-right: 8px solid transparent;
+        border-top: 8px solid #202123;
+      `;
+      tooltip.appendChild(arrow);
       
       // Create button
       const button = document.createElement('button');
@@ -676,20 +739,26 @@ ${TOOL_SECTION_END}`;
         color: white;
         border: none;
         border-radius: 4px;
-        padding: 8px 16px;
-        margin-top: 10px;
+        padding: 10px 16px;
         cursor: pointer;
         font-size: 14px;
-        position: relative;
+        font-weight: 500;
+        transition: background-color 0.2s;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-family-sans, system-ui, sans-serif);
       `;
       
       // Add tooltip functionality
-      button.addEventListener('mouseenter', () => {
+      container.addEventListener('mouseenter', () => {
         tooltip.style.opacity = '1';
+        tooltip.style.visibility = 'visible';
       });
       
-      button.addEventListener('mouseleave', () => {
+      container.addEventListener('mouseleave', () => {
         tooltip.style.opacity = '0';
+        tooltip.style.visibility = 'hidden';
       });
       
       // Add click handler
@@ -697,18 +766,143 @@ ${TOOL_SECTION_END}`;
         sendToolResult(toolCall, result);
         button.disabled = true;
         button.textContent = 'Result sent!';
-        button.style.backgroundColor = '#666';
-        tooltip.textContent = 'Result sent!';
+        button.style.backgroundColor = '#374151';
+        previewHeader.textContent = 'Message sent:';
       });
       
-      // Append tooltip to button
-      button.appendChild(tooltip);
+      // Append elements
+      container.appendChild(button);
+      container.appendChild(tooltip);
       
-      // Append button to message
-      latestMessage.appendChild(button);
+      // Replace the tool call text with our button
+      toolCallElement.innerHTML = '';
+      toolCallElement.appendChild(container);
     } catch (e) {
       console.error('📡 Error injecting button:', e);
     }
+  }
+  
+  // Fallback to append button if we can't find the tool call text
+  function appendToolResultButton(container, toolCall, result) {
+    // Format the message that will be sent
+    const resultMessage = `Tool result for ${toolCall.tool}:\n\n${result}`;
+    
+    // Create container for better positioning
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = `
+      position: relative;
+      margin-top: 12px;
+      display: inline-block;
+    `;
+    
+    // Create tooltip element
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tool-result-tooltip';
+    tooltip.style.cssText = `
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #202123;
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      max-width: 300px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s, visibility 0.2s;
+      pointer-events: none;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+      z-index: 1000;
+      text-align: left;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    `;
+    
+    // Create message preview in the tooltip
+    const previewHeader = document.createElement('div');
+    previewHeader.textContent = 'Message preview:';
+    previewHeader.style.cssText = `
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #8e8ea0;
+      font-size: 12px;
+    `;
+    
+    const previewContent = document.createElement('div');
+    previewContent.textContent = resultMessage;
+    previewContent.style.cssText = `
+      font-family: var(--font-family-sans);
+      line-height: 1.5;
+    `;
+    
+    tooltip.appendChild(previewHeader);
+    tooltip.appendChild(previewContent);
+    
+    // Add tooltip arrow
+    const arrow = document.createElement('div');
+    arrow.style.cssText = `
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-top: 8px solid #202123;
+    `;
+    tooltip.appendChild(arrow);
+    
+    // Create button
+    const button = document.createElement('button');
+    button.className = 'tool-result-button';
+    button.textContent = `Send result for ${toolCall.tool}`;
+    button.style.cssText = `
+      background-color: #10a37f;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: background-color 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-family-sans, system-ui, sans-serif);
+    `;
+    
+    // Add tooltip functionality
+    buttonContainer.addEventListener('mouseenter', () => {
+      tooltip.style.opacity = '1';
+      tooltip.style.visibility = 'visible';
+    });
+    
+    buttonContainer.addEventListener('mouseleave', () => {
+      tooltip.style.opacity = '0';
+      tooltip.style.visibility = 'hidden';
+    });
+    
+    // Add click handler
+    button.addEventListener('click', () => {
+      sendToolResult(toolCall, result);
+      button.disabled = true;
+      button.textContent = 'Result sent!';
+      button.style.backgroundColor = '#374151';
+      previewHeader.textContent = 'Message sent:';
+    });
+    
+    // Append elements
+    buttonContainer.appendChild(button);
+    buttonContainer.appendChild(tooltip);
+    
+    // Append container to message
+    container.appendChild(buttonContainer);
   }
   
   // Send the tool result as a new user message through the UI
