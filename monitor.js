@@ -1286,27 +1286,78 @@ ${this.TOOL_SECTION_END}`;
           return;
         }
         
-        // Find the tool call text to replace
-        let toolCallElement = null;
+        // Find the SPECIFIC tool call text matching this tool call
         const markdownElements = latestMessage.querySelectorAll('.markdown p, .prose p');
+        let toolCallElement = null;
+        let toolCallText = '';
+        let toolCallPattern = '';
         
-        // First, look for a corresponding tool call text that matches this specific tool
-        for (const element of markdownElements) {
-          const text = element.textContent || '';
-          if (text.includes(`"tool": "${toolCall.tool}"`) || 
-              text.includes(`tool: ${toolCall.tool}`) ||
-              text.includes(`name="${toolCall.tool}"`)) {
-            toolCallElement = element;
-            break;
+        // Prepare regex pattern to find this specific tool call
+        if (toolCall.tool && toolCall.parameters) {
+          const paramKey = Object.keys(toolCall.parameters)[0] || '';
+          const paramValue = toolCall.parameters[paramKey] || '';
+          if (paramKey && paramValue) {
+            // Look for text containing this specific tool and parameter
+            toolCallPattern = `"tool"\\s*:\\s*"${toolCall.tool}"[\\s\\S]*?"${paramKey}"\\s*:\\s*"${paramValue}"`;
+          } else {
+            // Just look for the tool name
+            toolCallPattern = `"tool"\\s*:\\s*"${toolCall.tool}"`;
           }
         }
         
-        // If not found, look for any tool call text
+        // Go through each paragraph element and check for our specific tool call
+        for (const element of markdownElements) {
+          const text = element.textContent || '';
+          
+          if (text.includes('[TOOL_CALL]') && text.includes('[/TOOL_CALL]')) {
+            // Extract all tool calls from this element
+            const toolCallMatches = Array.from(text.matchAll(/\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/g) || []);
+            
+            // Check if any of them match our specific tool call
+            for (const match of toolCallMatches) {
+              if (match && match[1]) {
+                const toolCallContent = match[1].trim();
+                
+                // Check if this is our target tool call
+                if (toolCallPattern && new RegExp(toolCallPattern, 'i').test(toolCallContent)) {
+                  toolCallElement = element;
+                  toolCallText = match[0]; // The full match including [TOOL_CALL] tags
+                  break;
+                }
+              }
+            }
+            
+            if (toolCallElement) break;
+          }
+        }
+        
+        // If no specific match was found, look for any generic matching tool call
+        if (!toolCallElement) {
+          for (const element of markdownElements) {
+            const text = element.textContent || '';
+            if (text.includes(`"tool": "${toolCall.tool}"`) || 
+                text.includes(`tool: ${toolCall.tool}`) ||
+                text.includes(`name="${toolCall.tool}"`)) {
+              toolCallElement = element;
+              const match = text.match(/\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/);
+              if (match) {
+                toolCallText = match[0];
+              }
+              break;
+            }
+          }
+        }
+        
+        // If still not found, fallback to any tool call text
         if (!toolCallElement) {
           for (const element of markdownElements) {
             const text = element.textContent || '';
             if (text.includes('[TOOL_CALL]') && text.includes('[/TOOL_CALL]')) {
               toolCallElement = element;
+              const match = text.match(/\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/);
+              if (match) {
+                toolCallText = match[0];
+              }
               break;
             }
           }
@@ -1319,6 +1370,8 @@ ${this.TOOL_SECTION_END}`;
         
         // Create container for buttons
         const container = document.createElement('div');
+        container.className = 'tool-result-button';
+        container.setAttribute('data-tool-id', toolId);
         container.style.cssText = `
           display: flex;
           align-items: center;
@@ -1356,85 +1409,51 @@ ${this.TOOL_SECTION_END}`;
           overflow-y: auto;
           display: none;
           margin-bottom: 4px;
+          cursor: pointer;
+          width: 100%;
+          box-sizing: border-box;
+          line-height: 1.5;
+          min-height: 100px;
         `;
         
-        // Create tooltip for result
-        const createTooltip = (content) => {
-          const tooltipContainer = document.createElement('div');
-          tooltipContainer.style.cssText = `
-            position: relative;
-            display: inline-block;
-            margin-left: 8px;
-            cursor: help;
-          `;
-          
-          const tooltipIcon = document.createElement('span');
-          tooltipIcon.textContent = 'ℹ️';
-          tooltipIcon.style.fontSize = '14px';
-          
-          const tooltipText = document.createElement('div');
-          tooltipText.innerHTML = content;
-          tooltipText.style.cssText = `
-            visibility: hidden;
-            background-color: #555;
-            color: #fff;
-            text-align: left;
-            border-radius: 6px;
-            padding: 8px;
-            position: absolute;
-            z-index: 1;
-            bottom: 125%;
-            left: 0;
-            margin-left: -100px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            width: 200px;
-            font-size: 12px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            pointer-events: none;
-          `;
-          
-          tooltipContainer.appendChild(tooltipIcon);
-          tooltipContainer.appendChild(tooltipText);
-          
-          tooltipContainer.addEventListener('mouseenter', () => {
-            tooltipText.style.visibility = 'visible';
-            tooltipText.style.opacity = '1';
-          });
-          
-          tooltipContainer.addEventListener('mouseleave', () => {
-            tooltipText.style.visibility = 'hidden';
-            tooltipText.style.opacity = '0';
-          });
-          
-          return tooltipContainer;
-        };
-        
-        // Tooltip element (initially not displayed)
-        let tooltipElement = null;
-        
-        // Flag to track if the tool has been executed
-        let hasBeenExecuted = false;
-        let currentResult = null;
-        
-        // Label to show the tool name with parameters
-        const toolLabel = document.createElement('span');
-        toolLabel.textContent = `${toolCall.tool}${formatParams()}: `;
-        toolLabel.style.cssText = `
-          font-weight: 500;
-          margin-right: 4px;
+        // Create editable result textarea (initially hidden)
+        const editableResult = document.createElement('textarea');
+        editableResult.style.cssText = `
+          background-color: #f8f9fa;
+          border: 1px solid #e9ecef;
+          border-radius: 4px;
+          padding: 8px;
+          margin-top: 8px;
+          font-family: monospace;
           font-size: 12px;
+          white-space: pre-wrap;
+          width: 100%;
+          min-height: 100px;
+          max-height: 200px;
+          display: none;
+          margin-bottom: 4px;
+          resize: vertical;
+          box-sizing: border-box;
+          line-height: 1.5;
+          overflow-y: auto;
         `;
         
-        // Create a hint message to show the user should click Run
-        const hintMessage = document.createElement('div');
-        hintMessage.textContent = 'ℹ️ Click "Run" to execute the tool';
-        hintMessage.style.cssText = `
-          font-size: 12px;
-          color: #6c757d;
-          margin-top: 4px;
-          font-style: italic;
-        `;
+        // Make result clickable and toggle between view/edit modes
+        resultElement.addEventListener('click', () => {
+          editableResult.value = resultElement.textContent;
+          resultElement.style.display = 'none';
+          editableResult.style.display = 'block';
+          editableResult.focus();
+          editableResult.select();
+        });
+        
+        // Add blur event to go back to view mode when focus is lost
+        editableResult.addEventListener('blur', () => {
+          resultElement.textContent = editableResult.value;
+          editableResult.style.display = 'none';
+          resultElement.style.display = 'block';
+          currentResult = editableResult.value;
+        });
         
         // Create button styling function
         const createButton = (text, color, clickHandler) => {
@@ -1454,6 +1473,19 @@ ${this.TOOL_SECTION_END}`;
           btn.addEventListener('click', clickHandler);
           return btn;
         };
+        
+        // Flag to track if the tool has been executed
+        let hasBeenExecuted = false;
+        let currentResult = null;
+        
+        // Label to show the tool name with parameters
+        const toolLabel = document.createElement('span');
+        toolLabel.textContent = `${toolCall.tool}${formatParams()}: `;
+        toolLabel.style.cssText = `
+          font-weight: 500;
+          margin-right: 4px;
+          font-size: 12px;
+        `;
         
         // Function to execute the tool and update UI
         const executeAndUpdateUI = async () => {
@@ -1489,30 +1521,15 @@ ${this.TOOL_SECTION_END}`;
             resultElement.style.color = '';
             const resultText = typeof currentResult === 'string' ? currentResult : JSON.stringify(currentResult, null, 2);
             resultElement.textContent = resultText;
+            resultElement.style.display = 'block';
             
-            // Enable send button now that we have a result
-            sendButton.disabled = false;
-            sendButton.style.opacity = '1';
-            
-            // Change Run button to Re-run
+            // Update button states and text
             runButton.textContent = 'Re-run';
             runButton.disabled = false;
             
-            // Add tooltip if not already present
-            if (!tooltipElement && resultText) {
-              tooltipElement = createTooltip(`<strong>Result:</strong><br>${resultText.substring(0, 150)}${resultText.length > 150 ? '...' : ''}`);
-              container.appendChild(tooltipElement);
-            } else if (tooltipElement) {
-              // Update existing tooltip
-              const tooltipContent = tooltipElement.querySelector('div');
-              if (tooltipContent) {
-                tooltipContent.innerHTML = `<strong>Result:</strong><br>${resultText.substring(0, 150)}${resultText.length > 150 ? '...' : ''}`;
-              }
-            }
-            
-            // Hide the hint message if it exists
-            if (hintMessage) {
-              hintMessage.style.display = 'none';
+            // If Run & Send button wasn't used, update its text to just 'Send'
+            if (sendButton.textContent !== 'Sent') {
+              sendButton.textContent = 'Send';
             }
             
             return currentResult;
@@ -1531,7 +1548,7 @@ ${this.TOOL_SECTION_END}`;
         };
         
         // Create the buttons
-        const runButton = createButton('Run', '#10a37f', () => {
+        const runButton = createButton('Run & Inspect', '#10a37f', () => {
           // Reset any previous results
           resultElement.textContent = '';
           resultElement.style.color = '';
@@ -1548,20 +1565,18 @@ ${this.TOOL_SECTION_END}`;
           }, 50);
         });
         
-        const sendButton = createButton('Send', '#2563eb', () => {
-          if (currentResult !== null) {
-            this.sendToolResult(toolCall, currentResult);
-            sendButton.disabled = true;
-            sendButton.style.opacity = '0.6';
-          } else {
-            console.error('📡 Cannot send - no result available. Run the tool first.');
-            resultElement.textContent = 'Please run the tool first to get a result.';
-            resultElement.style.display = 'block';
-            resultElement.style.color = '#dc3545';
+        const sendButton = createButton('Run & Send', '#6d28d9', async () => {
+          if (hasBeenExecuted && !runButton.disabled) {
+            // If already executed and we have a result, just send it
+            if (currentResult !== null) {
+              this.sendToolResult(toolCall, currentResult);
+              sendButton.disabled = true;
+              sendButton.style.opacity = '0.6';
+              sendButton.textContent = 'Sent';
+            }
+            return;
           }
-        });
-        
-        const runAndSendButton = createButton('Run+Send', '#6d28d9', async () => {
+          
           // Reset any previous results
           resultElement.textContent = '';
           resultElement.style.color = '';
@@ -1578,24 +1593,18 @@ ${this.TOOL_SECTION_END}`;
               const result = await executeAndUpdateUI();
               if (result !== null) {
                 this.sendToolResult(toolCall, result);
-                runAndSendButton.disabled = true;
-                runAndSendButton.style.opacity = '0.6';
                 sendButton.disabled = true;
                 sendButton.style.opacity = '0.6';
+                sendButton.textContent = 'Sent';
               }
             }, 50);
           }, 50);
         });
         
-        // Initially disable Send button until tool runs
-        sendButton.disabled = true;
-        sendButton.style.opacity = '0.6';
-        
         // Add buttons to container
         container.appendChild(toolLabel);
         container.appendChild(runButton);
         container.appendChild(sendButton);
-        container.appendChild(runAndSendButton);
         
         // Create a tools container
         let toolsContainer = document.createElement('div');
@@ -1607,33 +1616,52 @@ ${this.TOOL_SECTION_END}`;
           margin-top: 4px;
         `;
         
-        // Check if there's already a button container for other tool calls
-        const existingToolsContainer = toolCallElement.querySelector('.tool-buttons-container');
-        if (existingToolsContainer) {
-          // If there is, add our new button to it and return
-          existingToolsContainer.appendChild(container);
-          existingToolsContainer.appendChild(resultElement);
-          return;
-        }
-        
         // Add the container to the tools container
         toolsContainer.appendChild(container);
         toolsContainer.appendChild(resultElement);
+        toolsContainer.appendChild(editableResult);
         
-        // Replace the original text content with our buttons
-        // First, store the original text in a hidden element for reference
-        const originalText = document.createElement('div');
-        originalText.className = 'original-tool-call-text';
-        originalText.style.display = 'none';
-        originalText.textContent = toolCallElement.textContent;
-        
-        // Clear the element and add our new content
-        toolCallElement.innerHTML = '';
-        toolCallElement.appendChild(originalText);
-        toolCallElement.appendChild(toolsContainer);
-        
-        // Add the hint message to the tools container
-        toolsContainer.appendChild(hintMessage);
+        // Now we need to specifically replace just that tool call, not the entire element
+        if (toolCallText && toolCallElement) {
+          // Create a placeholder element with a unique ID to replace the tool call text
+          const placeholderId = `tool-placeholder-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+          const placeholder = `<div id="${placeholderId}"></div>`;
+          
+          // Replace only the specific tool call text with the placeholder
+          const safeToolCallText = toolCallText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex special chars
+          const newHTML = toolCallElement.innerHTML.replace(
+            new RegExp(safeToolCallText, 'g'), 
+            placeholder
+          );
+          
+          // Update the element's HTML with the placeholder
+          toolCallElement.innerHTML = newHTML;
+          
+          // Now find the placeholder and replace it with our actual UI
+          const placeholderElement = document.getElementById(placeholderId);
+          if (placeholderElement) {
+            placeholderElement.appendChild(toolsContainer);
+          } else {
+            console.log('📡 Could not find placeholder element, falling back to entire element replacement');
+            // Clear the element and add our new content
+            toolCallElement.innerHTML = '';
+            toolCallElement.appendChild(toolsContainer);
+          }
+        } else {
+          // Fallback to replacing the entire element if we couldn't isolate the specific tool call
+          console.log('📡 Could not isolate specific tool call text, replacing entire element');
+          
+          // Store the original text in a hidden element for reference
+          const originalText = document.createElement('div');
+          originalText.className = 'original-tool-call-text';
+          originalText.style.display = 'none';
+          originalText.textContent = toolCallElement.textContent;
+          
+          // Clear the element and add our new content
+          toolCallElement.innerHTML = '';
+          toolCallElement.appendChild(originalText);
+          toolCallElement.appendChild(toolsContainer);
+        }
       } catch (e) {
         console.error('📡 Error injecting button:', e);
       }
@@ -1647,10 +1675,16 @@ ${this.TOOL_SECTION_END}`;
         // Find the contenteditable div that serves as the input field
         const inputElement = document.querySelector('div[contenteditable="true"]#prompt-textarea') || 
                              document.querySelector('div[contenteditable="true"]');
-                                
         
-        // Format the result message
-        const resultMessage = `Tool result for ${toolCall.tool}:\n\n${result}`;
+        // Format params for display
+        const paramsStr = toolCall.parameters && Object.keys(toolCall.parameters).length > 0 
+          ? '(' + Object.entries(toolCall.parameters)
+              .map(([key, value]) => `${key}:${value}`)
+              .join(', ') + ')'
+          : '';
+        
+        // Format the result message with params included
+        const resultMessage = `Tool result for ${toolCall.tool}${paramsStr}:\n\n${result}`;
         
         // Clear any placeholder text by focusing first
         inputElement.focus();
