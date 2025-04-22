@@ -1455,42 +1455,56 @@ ${this.TOOL_SECTION_END}`;
           currentResult = editableResult.value;
         });
         
-        // Create button styling function
-        const createButton = (text, color, clickHandler) => {
-          const btn = document.createElement('button');
-          btn.textContent = text;
-          btn.style.cssText = `
-            background-color: ${color};
-            color: white;
-            border: none;
-            border-radius: 4px;
-            padding: 4px 8px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 500;
-            font-family: var(--font-family-sans, system-ui, sans-serif);
-          `;
-          btn.addEventListener('click', clickHandler);
-          return btn;
-        };
+        // Create a unified tool button that combines the tool name and run functionality
+        const toolButton = document.createElement('button');
+        toolButton.textContent = `${toolCall.tool}${formatParams()}`;
+        toolButton.className = 'tool-run-button';
+        toolButton.style.cssText = `
+          background-color: #10a37f;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          padding: 8px 12px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          font-family: var(--font-family-sans, system-ui, sans-serif);
+          margin-bottom: 8px;
+          text-align: left;
+          display: inline-block;
+          align-items: center;
+        `;
         
         // Flag to track if the tool has been executed
         let hasBeenExecuted = false;
         let currentResult = null;
         
-        // Label to show the tool name with parameters
-        const toolLabel = document.createElement('span');
-        toolLabel.textContent = `${toolCall.tool}${formatParams()}: `;
-        toolLabel.style.cssText = `
-          font-weight: 500;
-          margin-right: 4px;
+        // Create a send button (initially hidden)
+        const sendButton = document.createElement('button');
+        sendButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`;
+        sendButton.title = "Send result to chat";
+        sendButton.style.cssText = `
+          background-color: #6d28d9;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          padding: 6px;
+          cursor: pointer;
           font-size: 12px;
+          font-weight: 500;
+          font-family: var(--font-family-sans, system-ui, sans-serif);
+          margin-left: 8px;
+          width: 28px;
+          height: 28px;
+          align-items: center;
+          justify-content: center;
+          display: none;
         `;
         
         // Function to execute the tool and update UI
         const executeAndUpdateUI = async () => {
           // Prevent double execution during tool running
-          if (hasBeenExecuted && runButton.disabled) {
+          if (hasBeenExecuted && toolButton.disabled) {
             console.log('📡 Tool already being executed, please wait');
             return;
           }
@@ -1498,8 +1512,11 @@ ${this.TOOL_SECTION_END}`;
           try {
             // Mark as in progress
             hasBeenExecuted = true;
-            runButton.disabled = true;
-            runButton.textContent = 'Running...';
+            toolButton.disabled = true;
+            
+            // Change to loading state
+            const originalText = toolButton.textContent;
+            toolButton.textContent = 'Running...';
             
             // Execute tool and capture result
             let toolResult = this.toolManager.executeToolCall(toolCall.tool, toolCall.parameters);
@@ -1523,14 +1540,12 @@ ${this.TOOL_SECTION_END}`;
             resultElement.textContent = resultText;
             resultElement.style.display = 'block';
             
-            // Update button states and text
-            runButton.textContent = 'Re-run';
-            runButton.disabled = false;
+            // Show send button after successful execution
+            sendButton.style.display = 'inline-block';
             
-            // If Run & Send button wasn't used, update its text to just 'Send'
-            if (sendButton.textContent !== 'Sent') {
-              sendButton.textContent = 'Send';
-            }
+            // Update button states and text
+            toolButton.textContent = 'Re-run ' + originalText;
+            toolButton.disabled = false;
             
             return currentResult;
           } catch (e) {
@@ -1539,16 +1554,16 @@ ${this.TOOL_SECTION_END}`;
             resultElement.style.display = 'block';
             resultElement.style.color = '#dc3545';
             
-            // Re-enable run button
-            runButton.disabled = false;
-            runButton.textContent = 'Retry';
+            // Re-enable button
+            toolButton.disabled = false;
+            toolButton.textContent = 'Retry';
             hasBeenExecuted = false;
             return null;
           }
         };
         
-        // Create the buttons
-        const runButton = createButton('Run & Inspect', '#10a37f', () => {
+        // Add click handler to the tool button
+        toolButton.addEventListener('click', () => {
           // Reset any previous results
           resultElement.textContent = '';
           resultElement.style.color = '';
@@ -1565,46 +1580,24 @@ ${this.TOOL_SECTION_END}`;
           }, 50);
         });
         
-        const sendButton = createButton('Run & Send', '#6d28d9', async () => {
-          if (hasBeenExecuted && !runButton.disabled) {
-            // If already executed and we have a result, just send it
-            if (currentResult !== null) {
-              this.sendToolResult(toolCall, currentResult);
-              sendButton.disabled = true;
-              sendButton.style.opacity = '0.6';
-              sendButton.textContent = 'Sent';
-            }
-            return;
+        // Add send button click handler
+        sendButton.addEventListener('click', () => {
+          if (currentResult !== null) {
+            this.sendToolResult(toolCall, currentResult);
           }
-          
-          // Reset any previous results
-          resultElement.textContent = '';
-          resultElement.style.color = '';
-          resultElement.style.display = 'none';
-          
-          // Small delay then show loading indicator
-          setTimeout(() => {
-            resultElement.style.display = 'block';
-            resultElement.textContent = 'Running tool...';
-            resultElement.style.color = '#6c757d';
-            
-            // Execute after a very short delay
-            setTimeout(async () => {
-              const result = await executeAndUpdateUI();
-              if (result !== null) {
-                this.sendToolResult(toolCall, result);
-                sendButton.disabled = true;
-                sendButton.style.opacity = '0.6';
-                sendButton.textContent = 'Sent';
-              }
-            }, 50);
-          }, 50);
         });
         
-        // Add buttons to container
-        container.appendChild(toolLabel);
-        container.appendChild(runButton);
-        container.appendChild(sendButton);
+        // Create a tools container with a button row
+        const buttonRow = document.createElement('div');
+        buttonRow.style.cssText = `
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+        `;
+        
+        buttonRow.appendChild(toolButton);
+        buttonRow.appendChild(sendButton);
         
         // Create a tools container
         let toolsContainer = document.createElement('div');
@@ -1616,8 +1609,8 @@ ${this.TOOL_SECTION_END}`;
           margin-top: 4px;
         `;
         
-        // Add the container to the tools container
-        toolsContainer.appendChild(container);
+        // Add the components to the tools container
+        toolsContainer.appendChild(buttonRow);
         toolsContainer.appendChild(resultElement);
         toolsContainer.appendChild(editableResult);
         
