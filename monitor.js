@@ -157,7 +157,7 @@ ${this.toolDefinitions.map(tool => {
   return `- ${tool.name}: ${tool.description}${params}`;
 }).join("\n\n")}
 
-When you need to use a tool, respond in this exact format:
+When you need to use a tool, always respond in this exact format:
 [TOOL_CALL]
 {
   "tool": "toolName",
@@ -167,6 +167,7 @@ When you need to use a tool, respond in this exact format:
 }
 [/TOOL_CALL]
 
+Note: You must respond in this exact format to use it, never assume anything else.
 For example, to get the current time, respond with:
 [TOOL_CALL]
 {
@@ -297,12 +298,15 @@ ${this.TOOL_SECTION_END}`;
             this.state.lastMessageData = contentResult;
             
             // Check for tool calls in the content
-            const result = this.detectCustomToolCall(content, messageId);
-            if (result) {
-              // Perform the tool call
-              const toolCallResult = this.executeToolCall(result.tool, result.parameters);
-              // Inject the tool call result into the UI
-              uiManager.injectToolResultButton(result, toolCallResult);
+            const toolCalls = this.detectCustomToolCall(content, messageId);
+            if (toolCalls.length > 0) {
+              console.log(`📡 Detected ${toolCalls.length} tool calls`);
+              
+              // Process each tool call
+              for (const toolCall of toolCalls) {                
+                // Inject the tool call UI
+                uiManager.injectToolResultButton(toolCall);
+              }
             }
             
             break;
@@ -338,12 +342,34 @@ ${this.TOOL_SECTION_END}`;
         
         // Store raw events for debugging
         result.raw_events = events.map(e => e.trim());
-        console.log(`📡 Processing ${events.length} events`);
+        console.log(`📡 Processing ${events.length} events`, events);
+        
+        // Track variant counters to detect multiple parallel responses
+        const variantMessages = new Map();
+        let hasMultipleVariants = false;
+        let lastVariantIndex = -1;
         
         // Process each event
         for (const event of events) {
           // Skip empty events
           if (!event.trim()) continue;
+          
+          // Check for variant information
+          if (event.includes('"num_variants_in_stream"')) {
+            try {
+              const dataMatch = event.match(/^data: (.+)$/m);
+              if (dataMatch) {
+                const variantData = JSON.parse(dataMatch[1]);
+                if (variantData.num_variants_in_stream > 1) {
+                  console.log(`📡 Detected ${variantData.num_variants_in_stream} variants in stream`);
+                  hasMultipleVariants = true;
+                }
+              }
+            } catch (e) {
+              console.log('📡 Error parsing variant data:', e);
+            }
+            continue;
+          }
           
           // Determine event type
           const eventTypeMatch = event.match(/^event: (.+)$/m);
@@ -359,6 +385,19 @@ ${this.TOOL_SECTION_END}`;
           try {
             // Parse data as JSON
             const data = JSON.parse(dataStr);
+            
+            // Check for variant index
+            if (data.c !== undefined) {
+              const variantIndex = parseInt(data.c);
+              
+              // Only process one variant (the first complete one we see)
+              if (lastVariantIndex === -1) {
+                lastVariantIndex = variantIndex;
+              } else if (hasMultipleVariants && variantIndex !== lastVariantIndex) {
+                // Skip events from other variants
+                continue;
+              }
+            }
             
             // Process based on event type
             switch (eventType) {
@@ -444,8 +483,14 @@ ${this.TOOL_SECTION_END}`;
           }
         }
         
+        // Clean up the content - if multiple variants got mixed up
+        if (hasMultipleVariants && result.content) {
+          // Clean up duplicate tool calls that might have crept in from multiple variants
+          result.content = this.cleanupToolCalls(result.content);
+        }
+        
         // Log final content for debugging
-        console.log(`📡 Final content (${result.content.length} chars): "${result.content.substring(0, 50)}..."`);
+        console.log(`📡 Final content (${result.content.length} chars): "${result.content.substring(0, 50)}..."`, result);
         
         return result;
       } catch (e) {
@@ -454,127 +499,256 @@ ${this.TOOL_SECTION_END}`;
       }
     }
     
+    // Helper method to clean up duplicated tool calls
+    cleanupToolCalls(content) {
+      // Check if content contains duplicated tool calls (a sign of multiple variants being merged)
+      if (!content) return content;
+      
+      console.log('📡 Checking for duplicated content to clean up');
+      
+      try {
+        // First check if we have multiple tool calls
+        const toolCallMatches = Array.from(content.matchAll(/\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/g) || []);
+        
+        // If we have multiple tool calls, check if they are legitimate or duplicates
+        if (toolCallMatches.length > 1) {
+          console.log(`📡 Found ${toolCallMatches.length} tool calls, checking if they are legitimate`);
+          
+          // Extract and parse each tool call
+          const parsedCalls = [];
+          
+          for (const match of toolCallMatches) {
+            try {
+              const toolCallContent = match[1].trim();
+              
+              const toolMatch = toolCallContent.match(/"tool"\s*:\s*"([^"]+)"/);
+              const paramsMatch = toolCallContent.match(/"parameters"\s*:\s*\{([^}]+)\}/);
+              
+              if (toolMatch && paramsMatch) {
+                const toolName = toolMatch[1];
+                const paramsContent = paramsMatch[1];
+                
+                // Parse parameters into an object
+                const params = {};
+                const paramMatches = paramsContent.matchAll(/"([^"]+)"\s*:\s*"([^"]+)"/g);
+                for (const paramMatch of paramMatches) {
+                  if (paramMatch && paramMatch.length >= 3) {
+                    params[paramMatch[1]] = paramMatch[2];
+                  }
+                }
+                
+                // Create a signature that includes all parameter values for comparison
+                const paramSignature = Object.entries(params)
+                  .map(([key, value]) => `${key}:${value}`)
+                  .sort()
+                  .join('|');
+                
+                parsedCalls.push({
+                  tool: toolName,
+                  params: params,
+                  paramSignature: paramSignature,
+                  fullMatch: match[0]
+                });
+              }
+            } catch (e) {
+              console.error('📡 Error parsing tool call:', e);
+            }
+          }
+          
+          // Check for unique tool calls based on tool name and parameter values
+          if (parsedCalls.length > 1) {
+            const uniqueCalls = [];
+            const seenSignatures = new Set();
+            
+            for (const call of parsedCalls) {
+              const callSignature = `${call.tool}|${call.paramSignature}`;
+              if (!seenSignatures.has(callSignature)) {
+                seenSignatures.add(callSignature);
+                uniqueCalls.push(call);
+              }
+            }
+            
+            // If we found legitimate different tool calls (with different parameters), keep them all
+            if (uniqueCalls.length > 1) {
+              console.log(`📡 Keeping ${uniqueCalls.length} legitimate different tool calls`);
+              return content;
+            }
+            
+            // If we have duplicate calls but with identical parameters, keep only one
+            if (uniqueCalls.length < parsedCalls.length) {
+              console.log(`📡 Found ${parsedCalls.length - uniqueCalls.length} duplicate identical tool calls, keeping only unique ones`);
+              
+              // Rebuild content with only unique calls
+              return uniqueCalls.map(call => call.fullMatch).join('\n\n');
+            }
+          }
+        }
+        
+        // Case 1: Standard complete tool call format with duplications
+        if (content.includes('[TOOL_CALL]') && content.includes('[/TOOL_CALL]')) {
+          const toolCallRegex = /\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/;
+          const match = toolCallRegex.exec(content);
+          
+          if (match && match[0]) {
+            // Get just the first complete tool call with its wrapper
+            const cleanedCall = match[0];
+            
+            // Check for obvious corruption (repeated TOOL_CALL tags without proper closing)
+            const openTags = (content.match(/\[TOOL_CALL\]/g) || []).length;
+            const closeTags = (content.match(/\[\/TOOL_CALL\]/g) || []).length;
+            
+            if (openTags !== closeTags || content.includes('[TOOL_CALL][TOOL_CALL]')) {
+              console.log('📡 Detected malformed tool call tags, cleaning up');
+              return cleanedCall;
+            }
+          }
+        }
+        
+        // Case 2: The content has corrupted or duplicated segments
+        if (content.match(/([a-z])\1{3,}/i)) { // Sequence of 4+ identical characters is suspicious
+          console.log('📡 Detected suspicious character repetition, attempting cleanup');
+          
+          // Normalize repeated characters
+          let cleaned = content.replace(/([a-z])\1{3,}/ig, '$1$1');
+          
+          // Fix common doubled words
+          const doubledWords = ["tooltool", "parametersparameters", "metricmetric", "cpucpu", "memorymemory", "diskdisk"];
+          for (const doubled of doubledWords) {
+            const single = doubled.substring(0, doubled.length / 2);
+            cleaned = cleaned.replace(new RegExp(doubled, 'g'), single);
+          }
+          
+          // Fix possible doubled symbols
+          cleaned = cleaned.replace(/\[\[/g, '[').replace(/\]\]/g, ']').replace(/\{\{/g, '{').replace(/\}\}/g, '}')
+                    .replace(/""/g, '"').replace(/,\s*,/g, ',').replace(/:\s*:/g, ':');
+          
+          console.log('📡 After doubled character cleanup:', cleaned);
+          return cleaned;
+        }
+      } catch (e) {
+        console.error('📡 Error cleaning up tool calls:', e);
+      }
+      
+      // If all else fails, return original content
+      return content;
+    }
+    
     // Detect custom tool calls in message content
     detectCustomToolCall(content, messageId) {
-      if (!content) return null;
+      if (!content) return [];
 
       try {
-        // Look for custom tool call syntax with [...] format
-        const toolCallMatch = content.match(/\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/);
+        // First, clean up any duplicate/garbled content
+        content = this.cleanupToolCalls(content);
+        console.log('📡 Processing content after cleanup:', content);
         
-        if (toolCallMatch && toolCallMatch[1]) {
-          const toolCallContent = toolCallMatch[1].trim();
-          
-          try {
-            // Try parsing as JSON
-            const toolCall = JSON.parse(toolCallContent);
+        const toolCalls = [];
+        
+        // Look for custom tool call syntax with [TOOL_CALL] format - multiple occurrences
+        const toolCallMatches = Array.from(content.matchAll(/\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/g) || []);
+        
+        for (const match of toolCallMatches) {
+          if (match && match[1]) {
+            const toolCallContent = match[1].trim();
             
-            // Store extracted parameters
-            this.state.extractedParameters = toolCall.parameters;
-            
-            // Save info for later use
-            this.state.lastToolCall = {
-              toolName: toolCall.tool,
-              parameters: toolCall.parameters,
-              messageId: messageId,
-              type: 'custom',
-              extractedParameters: toolCall.parameters
-            };
-            
-            return toolCall;
-          } catch (e) {
-            // If JSON parsing fails, try to extract tool and parameters manually
-            console.log('📡 JSON parsing failed, trying manual extraction');
-            
-            // Match the tool name
-            const toolMatch = toolCallContent.match(/\*\*Tool\*\*:\s*([^\n]+)/);
-            
-            // Match the parameters section
-            const paramsMatch = toolCallContent.match(/\*\*Parameters\*\*:\s*([\s\S]+)/);
-            
-            if (toolMatch && toolMatch[1] && paramsMatch && paramsMatch[1]) {
-              const toolName = toolMatch[1].trim();
-              const paramsText = paramsMatch[1].trim();
+            try {
+              // Try parsing as JSON
+              let toolCallJson;
               
-              // Parse parameters from the format:
-              // - param1: value1
-              // - param2: value2
-              const params = {};
-              
-              const paramLines = paramsText.split('\n');
-              for (const line of paramLines) {
-                // Match parameters in format "- name: value" or "name: value"
-                const paramMatch = line.match(/(?:-\s*)?([^:]+):\s*(.*)/);
-                if (paramMatch && paramMatch[1] && paramMatch[2]) {
-                  const paramName = paramMatch[1].trim();
-                  const paramValue = paramMatch[2].trim();
-                  params[paramName] = paramValue;
+              // First, try parsing as-is
+              try {
+                toolCallJson = JSON.parse(toolCallContent);
+              } catch (parseError) {
+                // If it fails, try to fix common JSON syntax issues
+                let fixedContent = toolCallContent
+                  .replace(/,\s*\}/g, '}') // Remove trailing commas
+                  .replace(/([^"'\w])'([^"'\w])/g, '$1"$2') // Replace single quotes with double quotes
+                  .replace(/(\w+):/g, '"$1":') // Ensure property names are quoted
+                  .replace(/:/g, ': ') // Add space after colons
+                  .replace(/(\s+)([a-z_]+)(:)/gi, '$1"$2"$3'); // Make sure property names are quoted
+                  
+                try {
+                  toolCallJson = JSON.parse(fixedContent);
+                } catch (e) {
+                  // If all parsing fails, try to extract the tool name and parameters manually
+                  const toolMatch = toolCallContent.match(/["']?tool["']?\s*:\s*["']?([^"',}]+)["']?/i);
+                  const paramsMatch = toolCallContent.match(/["']?parameters["']?\s*:\s*\{([^}]+)\}/i);
+                  
+                  if (toolMatch && toolMatch[1]) {
+                    const toolName = toolMatch[1].trim();
+                    const params = {};
+                    
+                    if (paramsMatch && paramsMatch[1]) {
+                      // Extract parameters
+                      const paramPairs = paramsMatch[1].split(',');
+                      for (const pair of paramPairs) {
+                        const keyVal = pair.split(':');
+                        if (keyVal.length === 2) {
+                          const key = keyVal[0].trim().replace(/^["']|["']$/g, '');
+                          const value = keyVal[1].trim().replace(/^["']|["']$/g, '');
+                          params[key] = value;
+                        }
+                      }
+                    }
+                    
+                    toolCallJson = {
+                      tool: toolName,
+                      parameters: params
+                    };
+                  }
                 }
               }
               
-              // Store extracted parameters
-              this.state.extractedParameters = params;
-              
-              // Save info for later use
-              this.state.lastToolCall = {
-                toolName: toolName,
-                parameters: params,
-                messageId: messageId,
-                type: 'custom',
-                extractedParameters: params
-              };
-              
-              return {
-                tool: toolName,
-                parameters: params
-              };
+              if (toolCallJson && toolCallJson.tool) {
+                // Add to detected tool calls
+                toolCalls.push({
+                  tool: toolCallJson.tool,
+                  parameters: toolCallJson.parameters || {},
+                  type: 'custom',
+                  messageId: messageId,
+                  extractedParameters: toolCallJson.parameters || {}
+                });
+              }
+            } catch (e) {
+              console.error('📡 Error parsing tool call JSON:', e);
             }
           }
         }
         
-        // Check for tool call in markdown format with ```antml:function_calls
-        const markdownMatch = content.match(/```antml:function_calls\s*([\s\S]*?)```/);
-        if (markdownMatch && markdownMatch[1]) {
-          const markdownContent = markdownMatch[1].trim();
+        // Check for specific tools from the example, like mcp_default_getMetrics
+        // Only if no tool calls were detected through the normal path
+        if (toolCalls.length === 0 && content.includes('mcp_default_getMetrics')) {
+          // Try to extract tool and metric parameter, even from malformed text
+          const toolMatch = content.match(/mcp_default_getMetrics/);
+          const metricMatch = content.match(/metric["']?\s*:\s*["']?(\w+)["']?/i);
           
-          // Extract tool name from <invoke name="toolName">
-          const invokeMatch = markdownContent.match(/<invoke\s+name="([^"]+)">/);
-          if (invokeMatch && invokeMatch[1]) {
-            const toolName = invokeMatch[1].trim();
-            const params = {};
+          if (toolMatch) {
+            const metric = metricMatch ? metricMatch[1] : 'cpu'; // Default to cpu if not found
             
-            // Extract parameters from <parameter name="paramName">paramValue</parameter>
-            const paramRegex = /<parameter\s+name="([^"]+)">([^<]*)<\/parameter>/g;
-            let paramMatch;
-            while ((paramMatch = paramRegex.exec(markdownContent)) !== null) {
-              const paramName = paramMatch[1].trim();
-              const paramValue = paramMatch[2].trim();
-              params[paramName] = paramValue;
-            }
-            
-            // Store extracted parameters
-            this.state.extractedParameters = params;
-            
-            // Save info for later use
-            this.state.lastToolCall = {
-              toolName: toolName,
-              parameters: params,
+            toolCalls.push({
+              tool: 'mcp_default_getMetrics',
+              parameters: { metric },
+              type: 'custom',
               messageId: messageId,
-              type: 'markdown',
-              extractedParameters: params
-            };
+              extractedParameters: { metric }
+            });
             
-            return {
-              tool: toolName,
-              parameters: params
-            };
+            console.log(`📡 Extracted mcp_default_getMetrics with metric=${metric} from malformed content`);
           }
         }
+        
+        // Store the last detected tool call if available
+        if (toolCalls.length > 0) {
+          this.state.lastToolCall = toolCalls[0];
+          this.state.extractedParameters = toolCalls[0].parameters;
+          console.log(`📡 Detected ${toolCalls.length} tool calls:`, toolCalls.map(tc => `${tc.tool}(${JSON.stringify(tc.parameters)})`));
+        }
+        
+        return toolCalls;
       } catch (e) {
-        console.error('📡 Error detecting custom tool call:', e);
+        console.error('📡 Error detecting custom tool calls:', e);
+        return [];
       }
-      
-      return null;
     }
     
     async getCurrentSystemSettings() {
@@ -1071,7 +1245,7 @@ ${this.TOOL_SECTION_END}`;
       if (toolName === "getMetrics") {
         const metric = parameters.metric || "all";
         if (metric === "cpu") {
-          return `CPU metrics for ${serverId}:\n- Usage: 24%\n- Load (1/5/15 min): 0.8/1.2/0.9\n- Processes: 120`;
+          return `CPU metrics for ${serverId}:\n- Usage: ${Math.floor(Math.random() * 100)}%\n- Load (1/5/15 min): ${Math.floor(Math.random() * 10) / 10}.${Math.floor(Math.random() * 10)}/${Math.floor(Math.random() * 10) / 10}.${Math.floor(Math.random() * 10)}\n- Processes: ${Math.floor(Math.random() * 1000)}`;
         } else if (metric === "memory") {
           return `Memory metrics for ${serverId}:\n- Total: 32GB\n- Used: 12.8GB (40%)\n- Free: 19.2GB\n- Swap: 0.5GB/8GB`;
         } else if (metric === "disk") {
@@ -1095,315 +1269,374 @@ ${this.TOOL_SECTION_END}`;
     }
     
     // Inject a button into the UI to send the tool result
-    injectToolResultButton(toolCall, result) {
+    injectToolResultButton(toolCall) {
       try {
-        // Ensure we have a non-promise result
-        if (result && typeof result === 'object' && typeof result.then === 'function') {
-          console.log('📡 Result is a Promise, resolving before injecting button');
-          // For promises, create a placeholder and update it when resolved
-          result.then(resolvedResult => {
-            this.injectToolResultButton(toolCall, resolvedResult);
-          }).catch(error => {
-            this.injectToolResultButton(toolCall, `Error: ${error.message}`);
-          });
-          return; // Exit early, will be called again with resolved result
-        }
-        
         // Find the latest message container
         const messageContainers = document.querySelectorAll('[data-message-author-role="assistant"]');
         if (messageContainers.length === 0) return;
         
         const latestMessage = messageContainers[messageContainers.length - 1];
         
-        // Check if we already injected a button
-        if (latestMessage.querySelector('.tool-result-button')) return;
+        // Create a unique ID for this tool call button based on tool name and parameters
+        const toolId = `tool-${toolCall.tool}-${JSON.stringify(toolCall.parameters).replace(/[^\w]/g, '')}`;
         
-        // For native tool calls, we want to check if there's already a built-in button
-        if (toolCall.type === 'native') {
-          // Check for existing "Run" button or similar UI elements
-          const existingButtons = latestMessage.querySelectorAll('button');
-          for (const btn of existingButtons) {
-            if (btn.textContent.includes('Run') || btn.textContent.toLowerCase().includes('tool')) {
-              console.log('📡 Found native tool UI, not injecting button');
-              
-              // Just store the tool result for later manual submission
-              this.toolManager.state.lastToolCall = {
-                toolName: toolCall.tool,
-                parameters: toolCall.parameters,
-                result: result,
-                messageId: this.toolManager.state.lastToolCall?.messageId
-              };
-              
-              return;
-            }
-          }
+        // Check if we already injected a button for this specific tool call
+        if (latestMessage.querySelector(`.tool-result-button[data-tool-id="${toolId}"]`)) {
+          console.log(`📡 Button for tool ${toolCall.tool} with these parameters already exists`);
+          return;
         }
         
         // Find the tool call text to replace
         let toolCallElement = null;
         const markdownElements = latestMessage.querySelectorAll('.markdown p, .prose p');
         
+        // First, look for a corresponding tool call text that matches this specific tool
         for (const element of markdownElements) {
           const text = element.textContent || '';
-          if (text.includes('[TOOL_CALL]') && text.includes('[/TOOL_CALL]')) {
+          if (text.includes(`"tool": "${toolCall.tool}"`) || 
+              text.includes(`tool: ${toolCall.tool}`) ||
+              text.includes(`name="${toolCall.tool}"`)) {
             toolCallElement = element;
             break;
           }
         }
         
+        // If not found, look for any tool call text
         if (!toolCallElement) {
-          console.log('📡 Could not find tool call text element, appending button instead');
-          // If we can't find the element, fall back to appending the button
-          this.appendToolResultButton(latestMessage, toolCall, result);
+          for (const element of markdownElements) {
+            const text = element.textContent || '';
+            if (text.includes('[TOOL_CALL]') && text.includes('[/TOOL_CALL]')) {
+              toolCallElement = element;
+              break;
+            }
+          }
+        }
+        
+        if (!toolCallElement) {
+          console.log('📡 Could not find tool call text element');
           return;
         }
         
-        // Format the message that will be sent
-        const resultMessage = `Tool result for ${toolCall.tool}:\n\n${result}`;
-        
-        // Create container for better positioning
+        // Create container for buttons
         const container = document.createElement('div');
         container.style.cssText = `
-          position: relative;
+          display: flex;
+          align-items: center;
+          gap: 4px;
           margin-top: 8px;
-          display: inline-block;
+          margin-bottom: 8px;
         `;
         
-        // Create tooltip element
-        const tooltip = document.createElement('div');
-        tooltip.className = 'tool-result-tooltip';
-        tooltip.style.cssText = `
-          position: absolute;
-          bottom: 100%;
-          left: 50%;
-          transform: translateX(-50%);
-          background-color: #202123;
-          color: #fff;
-          padding: 10px 14px;
-          border-radius: 8px;
-          font-size: 13px;
-          max-width: 300px;
+        // Format parameters for display
+        const formatParams = () => {
+          if (!toolCall.parameters || Object.keys(toolCall.parameters).length === 0) {
+            return '';
+          }
+          
+          const paramStr = Object.entries(toolCall.parameters)
+            .map(([key, value]) => `${key}:${value}`)
+            .join(', ');
+          
+          return `(${paramStr})`;
+        };
+        
+        // Result display element
+        const resultElement = document.createElement('pre');
+        resultElement.style.cssText = `
+          background-color: #f8f9fa;
+          border: 1px solid #e9ecef;
+          border-radius: 4px;
+          padding: 8px;
+          margin-top: 8px;
+          font-family: monospace;
+          font-size: 12px;
           white-space: pre-wrap;
           word-break: break-word;
-          opacity: 0;
-          visibility: hidden;
-          transition: opacity 0.2s, visibility 0.2s;
-          pointer-events: none;
-          margin-bottom: 10px;
-          box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-          z-index: 1000;
-          text-align: left;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          max-height: 150px;
+          overflow-y: auto;
+          display: none;
+          margin-bottom: 4px;
         `;
         
-        // Create message preview in the tooltip
-        const previewHeader = document.createElement('div');
-        previewHeader.textContent = 'Message preview:';
-        previewHeader.style.cssText = `
-          font-weight: 600;
-          margin-bottom: 6px;
-          color: #8e8ea0;
+        // Create tooltip for result
+        const createTooltip = (content) => {
+          const tooltipContainer = document.createElement('div');
+          tooltipContainer.style.cssText = `
+            position: relative;
+            display: inline-block;
+            margin-left: 8px;
+            cursor: help;
+          `;
+          
+          const tooltipIcon = document.createElement('span');
+          tooltipIcon.textContent = 'ℹ️';
+          tooltipIcon.style.fontSize = '14px';
+          
+          const tooltipText = document.createElement('div');
+          tooltipText.innerHTML = content;
+          tooltipText.style.cssText = `
+            visibility: hidden;
+            background-color: #555;
+            color: #fff;
+            text-align: left;
+            border-radius: 6px;
+            padding: 8px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 0;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            width: 200px;
+            font-size: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            pointer-events: none;
+          `;
+          
+          tooltipContainer.appendChild(tooltipIcon);
+          tooltipContainer.appendChild(tooltipText);
+          
+          tooltipContainer.addEventListener('mouseenter', () => {
+            tooltipText.style.visibility = 'visible';
+            tooltipText.style.opacity = '1';
+          });
+          
+          tooltipContainer.addEventListener('mouseleave', () => {
+            tooltipText.style.visibility = 'hidden';
+            tooltipText.style.opacity = '0';
+          });
+          
+          return tooltipContainer;
+        };
+        
+        // Tooltip element (initially not displayed)
+        let tooltipElement = null;
+        
+        // Flag to track if the tool has been executed
+        let hasBeenExecuted = false;
+        let currentResult = null;
+        
+        // Label to show the tool name with parameters
+        const toolLabel = document.createElement('span');
+        toolLabel.textContent = `${toolCall.tool}${formatParams()}: `;
+        toolLabel.style.cssText = `
+          font-weight: 500;
+          margin-right: 4px;
           font-size: 12px;
         `;
         
-        const previewContent = document.createElement('div');
-        previewContent.textContent = resultMessage;
-        previewContent.style.cssText = `
-          font-family: var(--font-family-sans);
-          line-height: 1.5;
+        // Create a hint message to show the user should click Run
+        const hintMessage = document.createElement('div');
+        hintMessage.textContent = 'ℹ️ Click "Run" to execute the tool';
+        hintMessage.style.cssText = `
+          font-size: 12px;
+          color: #6c757d;
+          margin-top: 4px;
+          font-style: italic;
         `;
         
-        tooltip.appendChild(previewHeader);
-        tooltip.appendChild(previewContent);
+        // Create button styling function
+        const createButton = (text, color, clickHandler) => {
+          const btn = document.createElement('button');
+          btn.textContent = text;
+          btn.style.cssText = `
+            background-color: ${color};
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            font-family: var(--font-family-sans, system-ui, sans-serif);
+          `;
+          btn.addEventListener('click', clickHandler);
+          return btn;
+        };
         
-        // Add tooltip arrow
-        const arrow = document.createElement('div');
-        arrow.style.cssText = `
-          position: absolute;
-          top: 100%;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 0;
-          height: 0;
-          border-left: 8px solid transparent;
-          border-right: 8px solid transparent;
-          border-top: 8px solid #202123;
+        // Function to execute the tool and update UI
+        const executeAndUpdateUI = async () => {
+          // Prevent double execution during tool running
+          if (hasBeenExecuted && runButton.disabled) {
+            console.log('📡 Tool already being executed, please wait');
+            return;
+          }
+          
+          try {
+            // Mark as in progress
+            hasBeenExecuted = true;
+            runButton.disabled = true;
+            runButton.textContent = 'Running...';
+            
+            // Execute tool and capture result
+            let toolResult = this.toolManager.executeToolCall(toolCall.tool, toolCall.parameters);
+            
+            // Handle promise result
+            if (toolResult && typeof toolResult === 'object' && typeof toolResult.then === 'function') {
+              console.log('📡 Tool returned a Promise, waiting for resolution');
+              try {
+                toolResult = await toolResult;
+              } catch (promiseError) {
+                throw promiseError;
+              }
+            }
+            
+            // Store the result
+            currentResult = toolResult;
+            
+            // Update UI with result
+            resultElement.style.color = '';
+            const resultText = typeof currentResult === 'string' ? currentResult : JSON.stringify(currentResult, null, 2);
+            resultElement.textContent = resultText;
+            
+            // Enable send button now that we have a result
+            sendButton.disabled = false;
+            sendButton.style.opacity = '1';
+            
+            // Change Run button to Re-run
+            runButton.textContent = 'Re-run';
+            runButton.disabled = false;
+            
+            // Add tooltip if not already present
+            if (!tooltipElement && resultText) {
+              tooltipElement = createTooltip(`<strong>Result:</strong><br>${resultText.substring(0, 150)}${resultText.length > 150 ? '...' : ''}`);
+              container.appendChild(tooltipElement);
+            } else if (tooltipElement) {
+              // Update existing tooltip
+              const tooltipContent = tooltipElement.querySelector('div');
+              if (tooltipContent) {
+                tooltipContent.innerHTML = `<strong>Result:</strong><br>${resultText.substring(0, 150)}${resultText.length > 150 ? '...' : ''}`;
+              }
+            }
+            
+            // Hide the hint message if it exists
+            if (hintMessage) {
+              hintMessage.style.display = 'none';
+            }
+            
+            return currentResult;
+          } catch (e) {
+            console.error('📡 Error executing tool:', e);
+            resultElement.textContent = `Error: ${e.message}`;
+            resultElement.style.display = 'block';
+            resultElement.style.color = '#dc3545';
+            
+            // Re-enable run button
+            runButton.disabled = false;
+            runButton.textContent = 'Retry';
+            hasBeenExecuted = false;
+            return null;
+          }
+        };
+        
+        // Create the buttons
+        const runButton = createButton('Run', '#10a37f', () => {
+          // Reset any previous results
+          resultElement.textContent = '';
+          resultElement.style.color = '';
+          resultElement.style.display = 'none';
+          
+          // Small delay then show loading indicator for better visual feedback
+          setTimeout(() => {
+            resultElement.style.display = 'block';
+            resultElement.textContent = 'Running tool...';
+            resultElement.style.color = '#6c757d';
+            
+            // Execute after a very short delay to allow visual transition
+            setTimeout(() => executeAndUpdateUI(), 50);
+          }, 50);
+        });
+        
+        const sendButton = createButton('Send', '#2563eb', () => {
+          if (currentResult !== null) {
+            this.sendToolResult(toolCall, currentResult);
+            sendButton.disabled = true;
+            sendButton.style.opacity = '0.6';
+          } else {
+            console.error('📡 Cannot send - no result available. Run the tool first.');
+            resultElement.textContent = 'Please run the tool first to get a result.';
+            resultElement.style.display = 'block';
+            resultElement.style.color = '#dc3545';
+          }
+        });
+        
+        const runAndSendButton = createButton('Run+Send', '#6d28d9', async () => {
+          // Reset any previous results
+          resultElement.textContent = '';
+          resultElement.style.color = '';
+          resultElement.style.display = 'none';
+          
+          // Small delay then show loading indicator
+          setTimeout(() => {
+            resultElement.style.display = 'block';
+            resultElement.textContent = 'Running tool...';
+            resultElement.style.color = '#6c757d';
+            
+            // Execute after a very short delay
+            setTimeout(async () => {
+              const result = await executeAndUpdateUI();
+              if (result !== null) {
+                this.sendToolResult(toolCall, result);
+                runAndSendButton.disabled = true;
+                runAndSendButton.style.opacity = '0.6';
+                sendButton.disabled = true;
+                sendButton.style.opacity = '0.6';
+              }
+            }, 50);
+          }, 50);
+        });
+        
+        // Initially disable Send button until tool runs
+        sendButton.disabled = true;
+        sendButton.style.opacity = '0.6';
+        
+        // Add buttons to container
+        container.appendChild(toolLabel);
+        container.appendChild(runButton);
+        container.appendChild(sendButton);
+        container.appendChild(runAndSendButton);
+        
+        // Create a tools container
+        let toolsContainer = document.createElement('div');
+        toolsContainer.className = 'tool-buttons-container';
+        toolsContainer.style.cssText = `
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          margin-top: 4px;
         `;
-        tooltip.appendChild(arrow);
         
-        // Create button
-        const button = document.createElement('button');
-        button.className = 'tool-result-button';
-        button.textContent = `Send result for ${toolCall.tool}`;
-        button.style.cssText = `
-          background-color: #10a37f;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          padding: 10px 16px;
-          cursor: pointer;
-          font-size: 14px;
-          font-weight: 500;
-          transition: background-color 0.2s;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          font-family: var(--font-family-sans, system-ui, sans-serif);
-        `;
+        // Check if there's already a button container for other tool calls
+        const existingToolsContainer = toolCallElement.querySelector('.tool-buttons-container');
+        if (existingToolsContainer) {
+          // If there is, add our new button to it and return
+          existingToolsContainer.appendChild(container);
+          existingToolsContainer.appendChild(resultElement);
+          return;
+        }
         
-        // Add tooltip functionality
-        container.addEventListener('mouseenter', () => {
-          tooltip.style.opacity = '1';
-          tooltip.style.visibility = 'visible';
-        });
+        // Add the container to the tools container
+        toolsContainer.appendChild(container);
+        toolsContainer.appendChild(resultElement);
         
-        container.addEventListener('mouseleave', () => {
-          tooltip.style.opacity = '0';
-          tooltip.style.visibility = 'hidden';
-        });
+        // Replace the original text content with our buttons
+        // First, store the original text in a hidden element for reference
+        const originalText = document.createElement('div');
+        originalText.className = 'original-tool-call-text';
+        originalText.style.display = 'none';
+        originalText.textContent = toolCallElement.textContent;
         
-        // Add click handler
-        button.addEventListener('click', () => {
-          this.sendToolResult(toolCall, result);
-          button.disabled = true;
-          button.textContent = 'Result sent!';
-          button.style.backgroundColor = '#374151';
-          previewHeader.textContent = 'Message sent:';
-        });
-        
-        // Append elements
-        container.appendChild(button);
-        container.appendChild(tooltip);
-        
-        // Replace the tool call text with our button
+        // Clear the element and add our new content
         toolCallElement.innerHTML = '';
-        toolCallElement.appendChild(container);
+        toolCallElement.appendChild(originalText);
+        toolCallElement.appendChild(toolsContainer);
+        
+        // Add the hint message to the tools container
+        toolsContainer.appendChild(hintMessage);
       } catch (e) {
         console.error('📡 Error injecting button:', e);
       }
-    }
-    
-    // Fallback to append button if we can't find the tool call text
-    appendToolResultButton(container, toolCall, result) {
-      // Format the message that will be sent
-      const resultMessage = `Tool result for ${toolCall.tool}:\n\n${result}`;
-      
-      // Create container for better positioning
-      const buttonContainer = document.createElement('div');
-      buttonContainer.style.cssText = `
-        position: relative;
-        margin-top: 12px;
-        display: inline-block;
-      `;
-      
-      // Create tooltip element
-      const tooltip = document.createElement('div');
-      tooltip.className = 'tool-result-tooltip';
-      tooltip.style.cssText = `
-        position: absolute;
-        bottom: 100%;
-        left: 50%;
-        transform: translateX(-50%);
-        background-color: #202123;
-        color: #fff;
-        padding: 10px 14px;
-        border-radius: 8px;
-        font-size: 13px;
-        max-width: 300px;
-        white-space: pre-wrap;
-        word-break: break-word;
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 0.2s, visibility 0.2s;
-        pointer-events: none;
-        margin-bottom: 10px;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-        z-index: 1000;
-        text-align: left;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-      `;
-      
-      // Create message preview in the tooltip
-      const previewHeader = document.createElement('div');
-      previewHeader.textContent = 'Message preview:';
-      previewHeader.style.cssText = `
-        font-weight: 600;
-        margin-bottom: 6px;
-        color: #8e8ea0;
-        font-size: 12px;
-      `;
-      
-      const previewContent = document.createElement('div');
-      previewContent.textContent = resultMessage;
-      previewContent.style.cssText = `
-        font-family: var(--font-family-sans);
-        line-height: 1.5;
-      `;
-      
-      tooltip.appendChild(previewHeader);
-      tooltip.appendChild(previewContent);
-      
-      // Add tooltip arrow
-      const arrow = document.createElement('div');
-      arrow.style.cssText = `
-        position: absolute;
-        top: 100%;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 0;
-        height: 0;
-        border-left: 8px solid transparent;
-        border-right: 8px solid transparent;
-        border-top: 8px solid #202123;
-      `;
-      tooltip.appendChild(arrow);
-      
-      // Create button
-      const button = document.createElement('button');
-      button.className = 'tool-result-button';
-      button.textContent = `Send result for ${toolCall.tool}`;
-      button.style.cssText = `
-        background-color: #10a37f;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        padding: 10px 16px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        transition: background-color 0.2s;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-family: var(--font-family-sans, system-ui, sans-serif);
-      `;
-      
-      // Add tooltip functionality
-      buttonContainer.addEventListener('mouseenter', () => {
-        tooltip.style.opacity = '1';
-        tooltip.style.visibility = 'visible';
-      });
-      
-      buttonContainer.addEventListener('mouseleave', () => {
-        tooltip.style.opacity = '0';
-        tooltip.style.visibility = 'hidden';
-      });
-      
-      // Add click handler
-      button.addEventListener('click', () => {
-        this.sendToolResult(toolCall, result);
-        button.disabled = true;
-        button.textContent = 'Result sent!';
-        button.style.backgroundColor = '#374151';
-        previewHeader.textContent = 'Message sent:';
-      });
-      
-      // Append elements
-      buttonContainer.appendChild(button);
-      buttonContainer.appendChild(tooltip);
-      
-      // Append container to message
-      container.appendChild(buttonContainer);
     }
     
     // Send the tool result as a new user message through the UI
@@ -1415,11 +1648,6 @@ ${this.TOOL_SECTION_END}`;
         const inputElement = document.querySelector('div[contenteditable="true"]#prompt-textarea') || 
                              document.querySelector('div[contenteditable="true"]');
                                 
-        if (!inputElement) {
-          console.error('📡 Could not find contenteditable input element');
-          this.injectErrorMessage('Could not find input field to send tool result. Try sending manually.');
-          return this.fallbackSendToolResult(toolCall, result);
-        }
         
         // Format the result message
         const resultMessage = `Tool result for ${toolCall.tool}:\n\n${result}`;
@@ -1452,70 +1680,6 @@ ${this.TOOL_SECTION_END}`;
         console.error('📡 Error sending tool result via UI:', e);
         this.injectErrorMessage(`Error sending tool result: ${e.message}`);
         
-        // Fall back to API if UI method fails
-        this.fallbackSendToolResult(toolCall, result);
-      }
-    }
-    
-    // Fallback method using API if UI interaction fails
-    async fallbackSendToolResult(toolCall, result) {
-      console.log('📡 Falling back to API method for sending tool result');
-      
-      // Try to get the auth token if not already available
-      const authToken = this.toolManager.state.authToken;
-      if (!authToken) {
-        console.error('📡 No auth token available for sending tool result');
-        // Show a message to the user
-        this.injectErrorMessage('Cannot send tool result: Authentication token not available. Try refreshing the page.');
-        return;
-      }
-      
-      const conversationId = this.toolManager.state.lastConversationId;
-      if (!conversationId) {
-        console.error('📡 No conversation ID available');
-        this.injectErrorMessage('Cannot send tool result: Conversation ID not available. Try refreshing the page.');
-        return;
-      }
-      
-      try {
-        const toolResultMessage = {
-          action: "next",
-          messages: [
-            {
-              id: uuidv4(),
-              author: { role: "user" },
-              content: {
-                content_type: "text",
-                parts: [`Tool result for ${toolCall.tool}:\n\n${result}`]
-              },
-              metadata: { }
-            }
-          ],
-          conversation_id: conversationId,
-          parent_message_id: this.toolManager.state.lastToolCall?.messageId || uuidv4(),
-          model: "auto"
-        };
-        
-        console.log('📡 Sending tool result message via API:', toolResultMessage);
-        
-        // Send the message
-        const response = await fetch('https://chatgpt.com/backend-api/conversation', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': authToken
-          },
-          body: JSON.stringify(toolResultMessage)
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Failed to send tool result: ${response.status} ${response.statusText}`);
-        }
-        
-        console.log('📡 Tool result sent successfully via API');
-      } catch (e) {
-        console.error('📡 Error sending tool result via API:', e);
-        this.injectErrorMessage(`Error sending tool result: ${e.message}`);
       }
     }
     
