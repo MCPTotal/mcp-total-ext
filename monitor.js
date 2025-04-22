@@ -157,8 +157,8 @@ ${this.toolDefinitions.map(tool => {
   return `- ${tool.name}: ${tool.description}${params}`;
 }).join("\n\n")}
 
-When you need to use a tool, tell me and I'll run it for you and tell you the results.
-Always respond in this exact format:
+When you need to use a tool, tell me, I'll run it and tell you the result.
+Always!!! respond in this exact format:
 [TOOL_CALL]
 {
   "tool": "toolName",
@@ -168,7 +168,7 @@ Always respond in this exact format:
 }
 [/TOOL_CALL]
 
-Note: You must respond in this exact format to use it, never assume anything else.
+Note: You must! respond in this exact format.
 For example, to get the current time, respond with:
 [TOOL_CALL]
 {
@@ -177,7 +177,7 @@ For example, to get the current time, respond with:
 }
 [/TOOL_CALL]
 
-I will execute the tool and provide you with the result. Then continue the conversation.
+I will provide you with the result. Then continue the conversation.
 
 ${this.TOOL_SECTION_END}`;
     }
@@ -484,12 +484,6 @@ ${this.TOOL_SECTION_END}`;
           }
         }
         
-        // Clean up the content - if multiple variants got mixed up
-        if (hasMultipleVariants && result.content) {
-          // Clean up duplicate tool calls that might have crept in from multiple variants
-          result.content = this.cleanupToolCalls(result.content);
-        }
-        
         // Log final content for debugging
         console.log(`📡 Final content (${result.content.length} chars): "${result.content.substring(0, 50)}..."`, result);
         
@@ -499,150 +493,12 @@ ${this.TOOL_SECTION_END}`;
         return { content: result.content || '', raw_events: result.raw_events };
       }
     }
-    
-    // Helper method to clean up duplicated tool calls
-    cleanupToolCalls(content) {
-      // Check if content contains duplicated tool calls (a sign of multiple variants being merged)
-      if (!content) return content;
       
-      console.log('📡 Checking for duplicated content to clean up');
-      
-      try {
-        // First check if we have multiple tool calls
-        const toolCallMatches = Array.from(content.matchAll(/\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/g) || []);
-        
-        // If we have multiple tool calls, check if they are legitimate or duplicates
-        if (toolCallMatches.length > 1) {
-          console.log(`📡 Found ${toolCallMatches.length} tool calls, checking if they are legitimate`);
-          
-          // Extract and parse each tool call
-          const parsedCalls = [];
-          
-          for (const match of toolCallMatches) {
-            try {
-              const toolCallContent = match[1].trim();
-              
-              const toolMatch = toolCallContent.match(/"tool"\s*:\s*"([^"]+)"/);
-              const paramsMatch = toolCallContent.match(/"parameters"\s*:\s*\{([^}]+)\}/);
-              
-              if (toolMatch && paramsMatch) {
-                const toolName = toolMatch[1];
-                const paramsContent = paramsMatch[1];
-                
-                // Parse parameters into an object
-                const params = {};
-                const paramMatches = paramsContent.matchAll(/"([^"]+)"\s*:\s*"([^"]+)"/g);
-                for (const paramMatch of paramMatches) {
-                  if (paramMatch && paramMatch.length >= 3) {
-                    params[paramMatch[1]] = paramMatch[2];
-                  }
-                }
-                
-                // Create a signature that includes all parameter values for comparison
-                const paramSignature = Object.entries(params)
-                  .map(([key, value]) => `${key}:${value}`)
-                  .sort()
-                  .join('|');
-                
-                parsedCalls.push({
-                  tool: toolName,
-                  params: params,
-                  paramSignature: paramSignature,
-                  fullMatch: match[0]
-                });
-              }
-            } catch (e) {
-              console.error('📡 Error parsing tool call:', e);
-            }
-          }
-          
-          // Check for unique tool calls based on tool name and parameter values
-          if (parsedCalls.length > 1) {
-            const uniqueCalls = [];
-            const seenSignatures = new Set();
-            
-            for (const call of parsedCalls) {
-              const callSignature = `${call.tool}|${call.paramSignature}`;
-              if (!seenSignatures.has(callSignature)) {
-                seenSignatures.add(callSignature);
-                uniqueCalls.push(call);
-              }
-            }
-            
-            // If we found legitimate different tool calls (with different parameters), keep them all
-            if (uniqueCalls.length > 1) {
-              console.log(`📡 Keeping ${uniqueCalls.length} legitimate different tool calls`);
-              return content;
-            }
-            
-            // If we have duplicate calls but with identical parameters, keep only one
-            if (uniqueCalls.length < parsedCalls.length) {
-              console.log(`📡 Found ${parsedCalls.length - uniqueCalls.length} duplicate identical tool calls, keeping only unique ones`);
-              
-              // Rebuild content with only unique calls
-              return uniqueCalls.map(call => call.fullMatch).join('\n\n');
-            }
-          }
-        }
-        
-        // Case 1: Standard complete tool call format with duplications
-        if (content.includes('[TOOL_CALL]') && content.includes('[/TOOL_CALL]')) {
-          const toolCallRegex = /\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/;
-          const match = toolCallRegex.exec(content);
-          
-          if (match && match[0]) {
-            // Get just the first complete tool call with its wrapper
-            const cleanedCall = match[0];
-            
-            // Check for obvious corruption (repeated TOOL_CALL tags without proper closing)
-            const openTags = (content.match(/\[TOOL_CALL\]/g) || []).length;
-            const closeTags = (content.match(/\[\/TOOL_CALL\]/g) || []).length;
-            
-            if (openTags !== closeTags || content.includes('[TOOL_CALL][TOOL_CALL]')) {
-              console.log('📡 Detected malformed tool call tags, cleaning up');
-              return cleanedCall;
-            }
-          }
-        }
-        
-        // Case 2: The content has corrupted or duplicated segments
-        if (content.match(/([a-z])\1{3,}/i)) { // Sequence of 4+ identical characters is suspicious
-          console.log('📡 Detected suspicious character repetition, attempting cleanup');
-          
-          // Normalize repeated characters
-          let cleaned = content.replace(/([a-z])\1{3,}/ig, '$1$1');
-          
-          // Fix common doubled words
-          const doubledWords = ["tooltool", "parametersparameters", "metricmetric", "cpucpu", "memorymemory", "diskdisk"];
-          for (const doubled of doubledWords) {
-            const single = doubled.substring(0, doubled.length / 2);
-            cleaned = cleaned.replace(new RegExp(doubled, 'g'), single);
-          }
-          
-          // Fix possible doubled symbols
-          cleaned = cleaned.replace(/\[\[/g, '[').replace(/\]\]/g, ']').replace(/\{\{/g, '{').replace(/\}\}/g, '}')
-                    .replace(/""/g, '"').replace(/,\s*,/g, ',').replace(/:\s*:/g, ':');
-          
-          console.log('📡 After doubled character cleanup:', cleaned);
-          return cleaned;
-        }
-      } catch (e) {
-        console.error('📡 Error cleaning up tool calls:', e);
-      }
-      
-      // If all else fails, return original content
-      return content;
-    }
-    
     // Detect custom tool calls in message content
     detectCustomToolCall(content, messageId) {
       if (!content) return [];
 
       try {
-        // First, clean up any duplicate/garbled content
-        content = this.cleanupToolCalls(content);
-        console.log('📡 Processing content after cleanup:', content);
-        
         const toolCalls = [];
         
         // Look for custom tool call syntax with [TOOL_CALL] format - multiple occurrences
@@ -1218,38 +1074,6 @@ ${this.TOOL_SECTION_END}`;
           }
         }
         
-        // If no specific match was found, look for any generic matching tool call
-        if (!toolCallElement) {
-          for (const element of markdownElements) {
-            const text = element.textContent || '';
-            if (text.includes(`"tool": "${toolCall.tool}"`) || 
-                text.includes(`tool: ${toolCall.tool}`) ||
-                text.includes(`name="${toolCall.tool}"`)) {
-              toolCallElement = element;
-              const match = text.match(/\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/);
-              if (match) {
-                toolCallText = match[0];
-              }
-              break;
-            }
-          }
-        }
-        
-        // If still not found, fallback to any tool call text
-        if (!toolCallElement) {
-          for (const element of markdownElements) {
-            const text = element.textContent || '';
-            if (text.includes('[TOOL_CALL]') && text.includes('[/TOOL_CALL]')) {
-              toolCallElement = element;
-              const match = text.match(/\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/);
-              if (match) {
-                toolCallText = match[0];
-              }
-              break;
-            }
-          }
-        }
-        
         if (!toolCallElement) {
           console.log('📡 Could not find tool call text element');
           return;
@@ -1634,7 +1458,7 @@ ${this.TOOL_SECTION_END}`;
           : '';
         
         // Format the result message with params included
-        const resultMessage = `Tool result for ${toolCall.tool}${paramsStr}:\n\n${result}`;
+        const resultMessage = `Tool result for ${toolCall.tool}${paramsStr}:  ${result}`;
         
         // Clear any placeholder text by focusing first
         inputElement.focus();
