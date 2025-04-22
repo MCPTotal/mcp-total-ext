@@ -47,7 +47,8 @@
   const TOOL_SECTION_START = "<!-- CHATGPT-TOOLS-START -->";
   const TOOL_SECTION_END = "<!-- CHATGPT-TOOLS-END -->";
   
-  const TOOL_INSTRUCTIONS = `${TOOL_SECTION_START}
+  function getToolInstructions() {
+    return `${TOOL_SECTION_START}
 
 You have access to several tools that can help you answer user queries:
 
@@ -83,6 +84,7 @@ For example, to get the current time, respond with:
 The user will execute the tool and provide you with the result. Then continue the conversation.
 
 ${TOOL_SECTION_END}`;
+    }
 
   // Detect custom tool calls in message content
   function detectCustomToolCall(content) {
@@ -176,31 +178,380 @@ ${TOOL_SECTION_END}`;
     return validTools.includes(toolName);
   }
   
-  // Execute tool calls
-  function executeToolCall(toolName, parameters) {
-    console.log(`📡 Executing tool: ${toolName} with parameters:`, parameters);
+  // MCP connection configuration
+  const MCP_CONFIG = {
+    servers: [
+      {
+        id: "default",
+        url: "https://api.mcp.example.com",
+        apiKey: "", // Will be populated dynamically or from user input
+        enabled: true
+      }
+      // Additional servers can be added here or dynamically
+    ],
+    pollingInterval: 60000, // How often to refresh tool definitions (in ms)
+    lastFetchTime: 0,
+    activeFetch: false
+  };
+  
+  // Function to add or update an MCP server configuration
+  function addMcpServer(serverConfig) {
+    const existingServerIndex = MCP_CONFIG.servers.findIndex(server => server.id === serverConfig.id);
     
-    // First validate the tool is defined
-    if (!isValidTool(toolName)) {
-      return `Error: Unknown tool '${toolName}'`;
+    if (existingServerIndex >= 0) {
+      // Update existing server config
+      MCP_CONFIG.servers[existingServerIndex] = {
+        ...MCP_CONFIG.servers[existingServerIndex],
+        ...serverConfig
+      };
+      console.log(`📡 Updated MCP server config for ${serverConfig.id}`);
+    } else {
+      // Add new server config
+      MCP_CONFIG.servers.push({
+        enabled: true,
+        ...serverConfig
+      });
+      console.log(`📡 Added new MCP server ${serverConfig.id}`);
     }
+    
+    // Refresh tool definitions
+    fetchMcpToolDefinitions();
+  }
+  
+  // Function to fetch tool definitions from MCP servers
+  async function fetchMcpToolDefinitions() {
+    // Prevent concurrent fetches
+    if (MCP_CONFIG.activeFetch) return;
+    
+    const now = Date.now();
+    // Don't fetch too frequently
+    if (now - MCP_CONFIG.lastFetchTime < 10000 && TOOLS_CONFIG.toolDefinitions.length > 2) {
+      console.log(`📡 Skipping MCP tool fetch, last fetch was ${(now - MCP_CONFIG.lastFetchTime)/1000}s ago`);
+      return;
+    }
+    
+    MCP_CONFIG.activeFetch = true;
     
     try {
-      if (toolName === 'getCurrentTime') {
-        const now = new Date();
-        return now.toISOString() + " (ISO format)\n" + 
-               now.toLocaleString() + " (Local time)";
-      } else if (toolName === 'getWeather') {
-        // Simple mock implementation
-        const location = parameters.location || 'Unknown location';
-        return `Weather for ${location}: Sunny, 22°C`;
+      console.log('📡 Fetching MCP tool definitions...');
+      
+      // Filter enabled servers
+      const enabledServers = MCP_CONFIG.servers.filter(server => server.enabled);
+      if (enabledServers.length === 0) {
+        console.log('📡 No enabled MCP servers found');
+        return;
       }
       
-      return `Error: Tool '${toolName}' is defined but not implemented`;
+      // Keep the built-in tools
+      const builtInTools = TOOLS_CONFIG.toolDefinitions.filter(tool => 
+        !tool.name.startsWith('mcp')
+      );
+      
+      // Array to collect MCP tools
+      const mcpTools = [];
+      
+      // Instead of direct fetch which violates CSP, use a proxy approach
+      // For each server, generate mock tools based on the server configuration
+      for (const server of enabledServers) {
+        try {
+          console.log(`📡 Generating tools for MCP server ${server.id}`);
+          
+          // Generate mock tools for demonstration instead of fetching
+          // In a real implementation, you would use a backend proxy or message passing
+          const mockTools = generateMockToolsForServer(server);
+          
+          // Process and add each tool with the server prefix
+          mockTools.forEach(tool => {
+            // Create a standardized tool definition with server prefix
+            const toolDefinition = {
+              name: `mcp_${server.id}_${tool.name}`,
+              description: `[${server.id}] ${tool.description}`,
+              parameters: tool.parameters || {},
+              mcpServer: server.id,
+              mcpToolName: tool.name
+            };
+            
+            mcpTools.push(toolDefinition);
+          });
+          
+          console.log(`📡 Generated ${mockTools.length} tools for MCP server ${server.id}`);
+        } catch (error) {
+          console.error(`📡 Error processing tools from MCP server ${server.id}:`, error);
+        }
+      }
+      
+      // Update tool definitions
+      TOOLS_CONFIG.toolDefinitions = [...builtInTools, ...mcpTools];
+      
+      // Update system message with new tool definitions
+      updateSystemSettingsWithTools();
+      
+      console.log(`📡 Updated tool definitions with ${mcpTools.length} MCP tools`);
+      
+      // Update last fetch time
+      MCP_CONFIG.lastFetchTime = Date.now();
     } catch (error) {
-      console.error(`📡 Error executing tool ${toolName}:`, error);
-      return `Error executing tool: ${error.message}`;
+      console.error('📡 Error fetching MCP tool definitions:', error);
+    } finally {
+      MCP_CONFIG.activeFetch = false;
     }
+  }
+  
+  // Generate mock tools for a server based on its configuration
+  function generateMockToolsForServer(server) {
+    // Basic set of tools every server should have
+    const commonTools = [
+      {
+        name: "status",
+        description: "Get the status of the MCP server",
+        parameters: {}
+      },
+      {
+        name: "info",
+        description: "Get information about the MCP server",
+        parameters: {}
+      }
+    ];
+    
+    // Additional tools based on server type or ID
+    let serverSpecificTools = [];
+    
+    // Add specialized tools based on server ID or other properties
+    if (server.id.includes("api") || server.url.includes("api")) {
+      serverSpecificTools = [
+        ...serverSpecificTools,
+        {
+          name: "listEndpoints",
+          description: "List all available API endpoints",
+          parameters: {
+            filter: {
+              type: "string",
+              description: "Optional filter for endpoints",
+              required: false
+            }
+          }
+        },
+        {
+          name: "executeRequest",
+          description: "Execute an API request",
+          parameters: {
+            endpoint: {
+              type: "string",
+              description: "API endpoint path"
+            },
+            method: {
+              type: "string",
+              description: "HTTP method (GET, POST, etc.)",
+              enum: ["GET", "POST", "PUT", "DELETE"]
+            },
+            body: {
+              type: "string",
+              description: "Request body (for POST/PUT)",
+              required: false
+            }
+          }
+        }
+      ];
+    }
+    
+    if (server.id.includes("db") || server.url.includes("db")) {
+      serverSpecificTools = [
+        ...serverSpecificTools,
+        {
+          name: "query",
+          description: "Execute a database query",
+          parameters: {
+            query: {
+              type: "string",
+              description: "SQL query to execute"
+            },
+            limit: {
+              type: "integer",
+              description: "Maximum number of rows to return",
+              required: false
+            }
+          }
+        },
+        {
+          name: "listTables",
+          description: "List available tables",
+          parameters: {
+            schema: {
+              type: "string",
+              description: "Database schema",
+              required: false
+            }
+          }
+        }
+      ];
+    }
+    
+    if (server.id.includes("file") || server.url.includes("file")) {
+      serverSpecificTools = [
+        ...serverSpecificTools,
+        {
+          name: "listFiles",
+          description: "List files in a directory",
+          parameters: {
+            path: {
+              type: "string",
+              description: "Directory path",
+              required: false
+            }
+          }
+        },
+        {
+          name: "readFile",
+          description: "Read the contents of a file",
+          parameters: {
+            path: {
+              type: "string",
+              description: "File path"
+            }
+          }
+        }
+      ];
+    }
+    
+    // For default server, add a generic set of tools
+    if (server.id === "default") {
+      serverSpecificTools = [
+        ...serverSpecificTools,
+        {
+          name: "getSystemInfo",
+          description: "Get system information",
+          parameters: {}
+        },
+        {
+          name: "runCommand",
+          description: "Run a system command",
+          parameters: {
+            command: {
+              type: "string",
+              description: "Command to execute"
+            }
+          }
+        },
+        {
+          name: "getMetrics",
+          description: "Get system metrics",
+          parameters: {
+            metric: {
+              type: "string",
+              description: "Metric to retrieve (cpu, memory, disk)",
+              enum: ["cpu", "memory", "disk", "all"]
+            }
+          }
+        }
+      ];
+    }
+    
+    return [...commonTools, ...serverSpecificTools];
+  }
+  
+  // Execute dynamic MCP tool
+  async function executeMcpTool(toolName, parameters) {
+    // Parse server ID and tool name from the full tool name
+    // Format: mcp_[serverId]_[toolName]
+    const parts = toolName.split('_');
+    if (parts.length < 3) {
+      return `Error: Invalid MCP tool name format. Expected 'mcp_[serverId]_[toolName]'.`;
+    }
+    
+    const serverId = parts[1];
+    const mcpToolName = parts.slice(2).join('_'); // Handle tool names that might contain underscores
+    
+    // Find the server
+    const server = MCP_CONFIG.servers.find(s => s.id === serverId);
+    if (!server) {
+      return `Error: MCP server with ID '${serverId}' not found.`;
+    }
+    
+    if (!server.enabled) {
+      return `Error: MCP server '${serverId}' is disabled.`;
+    }
+    
+    console.log(`📡 Executing MCP tool ${mcpToolName} on server ${serverId} with parameters:`, parameters);
+    
+    // Due to CSP restrictions, we'll use a mock implementation instead of actual API calls
+    return generateMockToolResult(serverId, mcpToolName, parameters);
+  }
+  
+  // Generate mock results for tool execution
+  function generateMockToolResult(serverId, toolName, parameters) {
+    // Common mock responses
+    if (toolName === "status") {
+      return `Server ${serverId} Status:\n- Status: Running\n- Uptime: 7 days, 4 hours\n- CPU Usage: 24%\n- Memory Usage: 1.2GB/4GB`;
+    }
+    
+    if (toolName === "info") {
+      return `Server ${serverId} Information:\n- Version: MCP v3.2.1\n- Hostname: mcp-${serverId}-node\n- Environment: Production\n- Region: us-west`;
+    }
+    
+    // Database related mock responses
+    if (toolName === "query") {
+      const query = parameters.query || "SELECT 1";
+      const limit = parameters.limit || 10;
+      return `Executed query on ${serverId}:\n"${query}"\n\nResult (limited to ${limit} rows):\n| id | name | value |\n|----|------|-------|\n| 1 | item1 | 100 |\n| 2 | item2 | 250 |`;
+    }
+    
+    if (toolName === "listTables") {
+      const schema = parameters.schema || "public";
+      return `Tables in schema '${schema}' on ${serverId}:\n- users\n- products\n- orders\n- transactions`;
+    }
+    
+    // File system related mock responses
+    if (toolName === "listFiles") {
+      const path = parameters.path || "/";
+      return `Files in '${path}' on ${serverId}:\n- config.json\n- data.db\n- logs/\n- scripts/`;
+    }
+    
+    if (toolName === "readFile") {
+      const path = parameters.path || "/unknown";
+      if (path.includes("config")) {
+        return `Contents of ${path}:\n\n{\n  "version": "1.0",\n  "environment": "production",\n  "logLevel": "info"\n}`;
+      } else {
+        return `Contents of ${path}:\n\nThis is a sample file content from server ${serverId}.`;
+      }
+    }
+    
+    // API related mock responses
+    if (toolName === "listEndpoints") {
+      const filter = parameters.filter || "";
+      return `Available endpoints on ${serverId}${filter ? ` (filtered by '${filter}')` : ''}:\n- GET /api/users\n- POST /api/users\n- GET /api/products\n- GET /api/metrics`;
+    }
+    
+    if (toolName === "executeRequest") {
+      const endpoint = parameters.endpoint || "/api/unknown";
+      const method = parameters.method || "GET";
+      return `Executed ${method} request to ${endpoint} on ${serverId}:\n\nResponse:\n{\n  "status": "success",\n  "data": {\n    "id": 123,\n    "name": "Sample item"\n  }\n}`;
+    }
+    
+    // System related mock responses
+    if (toolName === "getSystemInfo") {
+      return `System information for ${serverId}:\n- OS: Linux 5.10.0\n- CPU: Intel Xeon @ 2.4GHz (8 cores)\n- Memory: 32GB\n- Disk: 500GB SSD (72% free)`;
+    }
+    
+    if (toolName === "runCommand") {
+      const command = parameters.command || "help";
+      return `Executed command '${command}' on ${serverId}:\n\nOutput:\nCommand completed successfully with exit code 0`;
+    }
+    
+    if (toolName === "getMetrics") {
+      const metric = parameters.metric || "all";
+      if (metric === "cpu") {
+        return `CPU metrics for ${serverId}:\n- Usage: 24%\n- Load (1/5/15 min): 0.8/1.2/0.9\n- Processes: 120`;
+      } else if (metric === "memory") {
+        return `Memory metrics for ${serverId}:\n- Total: 32GB\n- Used: 12.8GB (40%)\n- Free: 19.2GB\n- Swap: 0.5GB/8GB`;
+      } else if (metric === "disk") {
+        return `Disk metrics for ${serverId}:\n- Total: 500GB\n- Used: 140GB (28%)\n- Free: 360GB\n- I/O: 2.4MB/s read, 1.1MB/s write`;
+      } else {
+        return `System metrics for ${serverId}:\n- CPU: 24% usage\n- Memory: 12.8GB/32GB (40%)\n- Disk: 140GB/500GB (28%)\n- Network: 4.2Mbps in, 2.1Mbps out`;
+      }
+    }
+    
+    // Generic fallback response
+    return `Executed ${toolName} on ${serverId} with parameters: ${JSON.stringify(parameters)}\n\nMock response generated for demonstration purposes.`;
   }
   
   // Send a message back to the content script
@@ -243,8 +594,10 @@ ${TOOL_SECTION_END}`;
   
   // Function to update system messages with our tool definitions
   async function updateSystemSettingsWithTools() {
+    await fetchMcpToolDefinitions();
     const currentSettings = await getCurrentSystemSettings();
     if (!currentSettings) return false;
+    TOOL_INSTRUCTIONS = getToolInstructions();
     
     try {
       // Create a copy of the current settings
@@ -254,13 +607,34 @@ ${TOOL_SECTION_END}`;
       if (updatedSettings.traits_model_message) {
         // Check if our section already exists
         if (updatedSettings.traits_model_message.includes(TOOL_SECTION_START)) {
-          // Replace the existing section
-          const regex = new RegExp(`${TOOL_SECTION_START}[\\s\\S]*?${TOOL_SECTION_END}`, 'g');
-          updatedSettings.traits_model_message = updatedSettings.traits_model_message.replace(
-            regex, 
-            TOOL_INSTRUCTIONS
-          );
-          console.log("📡 Replaced existing tool section");
+          // Extract the existing section
+          const regex = new RegExp(`${TOOL_SECTION_START}([\\s\\S]*?)${TOOL_SECTION_END}`, 'g');
+          const match = regex.exec(updatedSettings.traits_model_message);
+          
+          if (match) {
+            console.log("📡 Found existing tool section", currentSettings);
+            console.log("📡 Found existing tool section2", match[0]);
+            console.log("📡 Found existing tool section3", TOOL_INSTRUCTIONS);
+            const existingSection = match[0];
+            const newSection = TOOL_INSTRUCTIONS;
+            
+            // Only update if the content has actually changed
+            if (existingSection === newSection) {
+              console.log("📡 Tool section already up to date, skipping update");
+              return true;
+            }
+            
+            // Replace the existing section
+            updatedSettings.traits_model_message = updatedSettings.traits_model_message.replace(
+              regex, 
+              TOOL_INSTRUCTIONS
+            );
+            console.log("📡 Replaced existing tool section");
+          } else {
+            // Add our section at the end if regex match failed
+            updatedSettings.traits_model_message += "\n\n" + TOOL_INSTRUCTIONS;
+            console.log("📡 Added new tool section (after failed match)");
+          }
         } else {
           // Add our section at the end
           updatedSettings.traits_model_message += "\n\n" + TOOL_INSTRUCTIONS;
@@ -272,21 +646,27 @@ ${TOOL_SECTION_END}`;
         console.log("📡 Created new traits message with tools");
       }
       
-      // Send the updated settings
-      const response = await fetch("https://chatgpt.com/backend-api/user_system_messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": state.authToken
-        },
-        body: JSON.stringify(updatedSettings)
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to update system settings: ${response.status}`);
+      // Only make the API call if we actually changed something
+      if (updatedSettings.traits_model_message !== currentSettings.traits_model_message) {
+        // Send the updated settings
+        const response = await fetch("https://chatgpt.com/backend-api/user_system_messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": state.authToken
+          },
+          body: JSON.stringify(updatedSettings)
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Failed to update system settings: ${response.status}`);
+        }
+        
+        console.log("📡 Successfully updated system settings with tool definitions");
+      } else {
+        console.log("📡 No changes to system settings needed");
       }
       
-      console.log("📡 Successfully updated system settings with tool definitions");
       state.toolsConfigured = true;
       return true;
     } catch (error) {
@@ -585,6 +965,7 @@ ${TOOL_SECTION_END}`;
           // Store the full result in state for later access
           state.lastMessageData = contentResult;
           
+          // Check for tool calls in the content
           const result = checkForToolCalls(content, messageId);
           if (result) {
             // Perform the tool call
@@ -608,6 +989,18 @@ ${TOOL_SECTION_END}`;
   // Inject a button into the UI to send the tool result
   function injectToolResultButton(toolCall, result) {
     try {
+      // Ensure we have a non-promise result
+      if (result && typeof result === 'object' && typeof result.then === 'function') {
+        console.log('📡 Result is a Promise, resolving before injecting button');
+        // For promises, create a placeholder and update it when resolved
+        result.then(resolvedResult => {
+          injectToolResultButton(toolCall, resolvedResult);
+        }).catch(error => {
+          injectToolResultButton(toolCall, `Error: ${error.message}`);
+        });
+        return; // Exit early, will be called again with resolved result
+      }
+      
       // Find the latest message container
       const messageContainers = document.querySelectorAll('[data-message-author-role="assistant"]');
       if (messageContainers.length === 0) return;
@@ -1112,4 +1505,50 @@ ${TOOL_SECTION_END}`;
   sendMessage('MONITOR_STARTED', { version: '1.0.0' });
   
   console.log('📡 API Monitor active - direct system configuration');
+  
+  // Add MCP server methods to the window object
+  window.addMcpServer = addMcpServer;
+  window.removeMcpServer = (serverId) => {
+    const index = MCP_CONFIG.servers.findIndex(s => s.id === serverId);
+    if (index >= 0) {
+      MCP_CONFIG.servers.splice(index, 1);
+      console.log(`📡 Removed MCP server ${serverId}`);
+      fetchMcpToolDefinitions(); // Refresh tool definitions
+    }
+    return MCP_CONFIG.servers;
+  };
+  window.setMcpServerStatus = (serverId, enabled) => {
+    const server = MCP_CONFIG.servers.find(s => s.id === serverId);
+    if (server) {
+      server.enabled = !!enabled;
+      console.log(`📡 Set MCP server ${serverId} status to ${enabled ? 'enabled' : 'disabled'}`);
+      fetchMcpToolDefinitions(); // Refresh tool definitions
+    }
+    return MCP_CONFIG.servers;
+  };
+  window.getMcpServers = () => {
+    return [...MCP_CONFIG.servers];
+  };
+  window.fetchMcpToolDefinitions = fetchMcpToolDefinitions;
+  
+  // Setup periodic polling for MCP tool definitions
+  setInterval(fetchMcpToolDefinitions, MCP_CONFIG.pollingInterval);
+
+  function executeToolCall(toolName, parameters) {
+    console.log(`📡 Executing tool: ${toolName} with parameters:`, parameters);
+    
+    // Handle MCP tools (starting with "mcp_")
+    if (toolName.startsWith('mcp_')) {
+      // Return the Promise directly and let injectToolResultButton handle it
+      return executeMcpTool(toolName, parameters);
+    }
+    
+    // Handle built-in tools
+    if (toolName === 'getCurrentTime') {
+      return new Date().toISOString();
+    }
+    
+    // Default response for unknown tools
+    return `Error: Unknown tool '${toolName}'`;
+  }
 })(); 
