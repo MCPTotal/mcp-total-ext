@@ -144,7 +144,7 @@
     getToolInstructions() {
       return `${this.TOOL_SECTION_START}
 
-You have access to several tools that can help you answer user queries:
+I have access to several tools that can help you answer my queries:
 
 ${this.toolDefinitions.map(tool => {
   let params = "";
@@ -157,7 +157,8 @@ ${this.toolDefinitions.map(tool => {
   return `- ${tool.name}: ${tool.description}${params}`;
 }).join("\n\n")}
 
-When you need to use a tool, always respond in this exact format:
+When you need to use a tool, tell me and I'll run it for you and tell you the results.
+Always respond in this exact format:
 [TOOL_CALL]
 {
   "tool": "toolName",
@@ -176,7 +177,7 @@ For example, to get the current time, respond with:
 }
 [/TOOL_CALL]
 
-The user will execute the tool and provide you with the result. Then continue the conversation.
+I will execute the tool and provide you with the result. Then continue the conversation.
 
 ${this.TOOL_SECTION_END}`;
     }
@@ -715,28 +716,6 @@ ${this.TOOL_SECTION_END}`;
           }
         }
         
-        // Check for specific tools from the example, like mcp_default_getMetrics
-        // Only if no tool calls were detected through the normal path
-        if (toolCalls.length === 0 && content.includes('mcp_default_getMetrics')) {
-          // Try to extract tool and metric parameter, even from malformed text
-          const toolMatch = content.match(/mcp_default_getMetrics/);
-          const metricMatch = content.match(/metric["']?\s*:\s*["']?(\w+)["']?/i);
-          
-          if (toolMatch) {
-            const metric = metricMatch ? metricMatch[1] : 'cpu'; // Default to cpu if not found
-            
-            toolCalls.push({
-              tool: 'mcp_default_getMetrics',
-              parameters: { metric },
-              type: 'custom',
-              messageId: messageId,
-              extractedParameters: { metric }
-            });
-            
-            console.log(`📡 Extracted mcp_default_getMetrics with metric=${metric} from malformed content`);
-          }
-        }
-        
         // Store the last detected tool call if available
         if (toolCalls.length > 0) {
           this.state.lastToolCall = toolCalls[0];
@@ -833,6 +812,7 @@ ${this.TOOL_SECTION_END}`;
         // Only make the API call if we actually changed something
         if (updatedSettings.traits_model_message !== currentSettings.traits_model_message) {
           // Send the updated settings
+          console.log("📡 Updating system settings with tool definitions:", updatedSettings);
           const response = await fetch("https://chatgpt.com/backend-api/user_system_messages", {
             method: "POST",
             headers: {
@@ -1006,20 +986,6 @@ ${this.TOOL_SECTION_END}`;
     }
     
     generateMockToolsForServer(server) {
-      // Basic set of tools every server should have
-      const commonTools = [
-        {
-          name: "status",
-          description: "Get the status of the MCP server",
-          parameters: {}
-        },
-        {
-          name: "info",
-          description: "Get information about the MCP server",
-          parameters: {}
-        }
-      ];
-      
       // Additional tools based on server type or ID
       let serverSpecificTools = [];
       
@@ -1035,85 +1001,6 @@ ${this.TOOL_SECTION_END}`;
                 type: "string",
                 description: "Optional filter for endpoints",
                 required: false
-              }
-            }
-          },
-          {
-            name: "executeRequest",
-            description: "Execute an API request",
-            parameters: {
-              endpoint: {
-                type: "string",
-                description: "API endpoint path"
-              },
-              method: {
-                type: "string",
-                description: "HTTP method (GET, POST, etc.)",
-                enum: ["GET", "POST", "PUT", "DELETE"]
-              },
-              body: {
-                type: "string",
-                description: "Request body (for POST/PUT)",
-                required: false
-              }
-            }
-          }
-        ];
-      }
-      
-      if (server.id.includes("db") || server.url.includes("db")) {
-        serverSpecificTools = [
-          ...serverSpecificTools,
-          {
-            name: "query",
-            description: "Execute a database query",
-            parameters: {
-              query: {
-                type: "string",
-                description: "SQL query to execute"
-              },
-              limit: {
-                type: "integer",
-                description: "Maximum number of rows to return",
-                required: false
-              }
-            }
-          },
-          {
-            name: "listTables",
-            description: "List available tables",
-            parameters: {
-              schema: {
-                type: "string",
-                description: "Database schema",
-                required: false
-              }
-            }
-          }
-        ];
-      }
-      
-      if (server.id.includes("file") || server.url.includes("file")) {
-        serverSpecificTools = [
-          ...serverSpecificTools,
-          {
-            name: "listFiles",
-            description: "List files in a directory",
-            parameters: {
-              path: {
-                type: "string",
-                description: "Directory path",
-                required: false
-              }
-            }
-          },
-          {
-            name: "readFile",
-            description: "Read the contents of a file",
-            parameters: {
-              path: {
-                type: "string",
-                description: "File path"
               }
             }
           }
@@ -1153,7 +1040,7 @@ ${this.TOOL_SECTION_END}`;
         ];
       }
       
-      return [...commonTools, ...serverSpecificTools];
+      return [...serverSpecificTools];
     }
     
     async executeMcpTool(toolName, parameters) {
@@ -1398,14 +1285,14 @@ ${this.TOOL_SECTION_END}`;
         resultElement.style.cssText = `
           background-color: #f8f9fa;
           border: 1px solid #e9ecef;
-          border-radius: 4px;
-          padding: 8px;
+          border-radius: 6px;
+          padding: 10px;
           margin-top: 8px;
           font-family: monospace;
           font-size: 12px;
           white-space: pre-wrap;
           word-break: break-word;
-          max-height: 150px;
+          max-height: 180px;
           overflow-y: auto;
           display: none;
           margin-bottom: 4px;
@@ -1414,15 +1301,26 @@ ${this.TOOL_SECTION_END}`;
           box-sizing: border-box;
           line-height: 1.5;
           min-height: 100px;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+          transition: border-color 0.2s;
         `;
+        
+        // Add visual cue on hover
+        resultElement.addEventListener('mouseover', () => {
+          resultElement.style.borderColor = '#ced4da';
+        });
+        
+        resultElement.addEventListener('mouseout', () => {
+          resultElement.style.borderColor = '#e9ecef';
+        });
         
         // Create editable result textarea (initially hidden)
         const editableResult = document.createElement('textarea');
         editableResult.style.cssText = `
           background-color: #f8f9fa;
-          border: 1px solid #e9ecef;
-          border-radius: 4px;
-          padding: 8px;
+          border: 1px solid #ced4da;
+          border-radius: 6px;
+          padding: 10px;
           margin-top: 8px;
           font-family: monospace;
           font-size: 12px;
@@ -1436,6 +1334,8 @@ ${this.TOOL_SECTION_END}`;
           box-sizing: border-box;
           line-height: 1.5;
           overflow-y: auto;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+          outline: none;
         `;
         
         // Make result clickable and toggle between view/edit modes
@@ -1455,15 +1355,18 @@ ${this.TOOL_SECTION_END}`;
           currentResult = editableResult.value;
         });
         
+        // Store the original tool name for later reuse
+        const originalToolName = `${toolCall.tool}${formatParams()}`;
+        
         // Create a unified tool button that combines the tool name and run functionality
         const toolButton = document.createElement('button');
-        toolButton.textContent = `${toolCall.tool}${formatParams()}`;
+        toolButton.textContent = originalToolName;
         toolButton.className = 'tool-run-button';
         toolButton.style.cssText = `
-          background-color: #10a37f;
+          background-color: #8e44ad;
           color: white;
           border: none;
-          border-radius: 4px;
+          border-radius: 6px;
           padding: 8px 12px;
           cursor: pointer;
           font-size: 14px;
@@ -1473,7 +1376,18 @@ ${this.TOOL_SECTION_END}`;
           text-align: left;
           display: inline-block;
           align-items: center;
+          transition: background-color 0.2s ease;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.12);
         `;
+        
+        // Add hover effect
+        toolButton.addEventListener('mouseover', () => {
+          toolButton.style.backgroundColor = '#9b59b6';
+        });
+        
+        toolButton.addEventListener('mouseout', () => {
+          toolButton.style.backgroundColor = '#8e44ad';
+        });
         
         // Flag to track if the tool has been executed
         let hasBeenExecuted = false;
@@ -1487,7 +1401,7 @@ ${this.TOOL_SECTION_END}`;
           background-color: #6d28d9;
           color: white;
           border: none;
-          border-radius: 4px;
+          border-radius: 6px;
           padding: 6px;
           cursor: pointer;
           font-size: 12px;
@@ -1499,7 +1413,18 @@ ${this.TOOL_SECTION_END}`;
           align-items: center;
           justify-content: center;
           display: none;
+          transition: all 0.2s ease;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.12);
         `;
+        
+        // Add hover effect
+        sendButton.addEventListener('mouseover', () => {
+          sendButton.style.backgroundColor = '#7c3aed';
+        });
+        
+        sendButton.addEventListener('mouseout', () => {
+          sendButton.style.backgroundColor = '#6d28d9';
+        });
         
         // Function to execute the tool and update UI
         const executeAndUpdateUI = async () => {
@@ -1515,7 +1440,6 @@ ${this.TOOL_SECTION_END}`;
             toolButton.disabled = true;
             
             // Change to loading state
-            const originalText = toolButton.textContent;
             toolButton.textContent = 'Running...';
             
             // Execute tool and capture result
@@ -1543,9 +1467,15 @@ ${this.TOOL_SECTION_END}`;
             // Show send button after successful execution
             sendButton.style.display = 'inline-block';
             
-            // Update button states and text
-            toolButton.textContent = 'Re-run ' + originalText;
+            // Update button states and text - always use the stored original tool name
+            toolButton.textContent = 'Re-run ' + originalToolName;
             toolButton.disabled = false;
+            
+            // Add a small indicator icon to make the re-run button more distinctive
+            const rerunIcon = document.createElement('span');
+            rerunIcon.innerHTML = '↻ ';
+            rerunIcon.style.marginRight = '4px';
+            toolButton.prepend(rerunIcon);
             
             return currentResult;
           } catch (e) {
@@ -1564,6 +1494,11 @@ ${this.TOOL_SECTION_END}`;
         
         // Add click handler to the tool button
         toolButton.addEventListener('click', () => {
+          // Reset button text to original if it's showing "Re-run"
+          if (toolButton.textContent.startsWith('Re-run')) {
+            toolButton.textContent = originalToolName;
+          }
+          
           // Reset any previous results
           resultElement.textContent = '';
           resultElement.style.color = '';
@@ -1583,7 +1518,29 @@ ${this.TOOL_SECTION_END}`;
         // Add send button click handler
         sendButton.addEventListener('click', () => {
           if (currentResult !== null) {
+            // Show sending feedback
+            const originalBackground = sendButton.style.backgroundColor;
+            const originalContent = sendButton.innerHTML;
+            
+            // Switch to a checkmark briefly to indicate success
+            sendButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+            sendButton.style.backgroundColor = '#10b981'; // Success green
+            sendButton.disabled = true;
+            
+            // Send the result
             this.sendToolResult(toolCall, currentResult);
+            
+            // Hide result displays after sending
+            setTimeout(() => {
+              resultElement.style.display = 'none';
+              editableResult.style.display = 'none';
+              
+              // Reset and hide the send button 
+              sendButton.innerHTML = originalContent;
+              sendButton.style.backgroundColor = originalBackground;
+              sendButton.disabled = false;
+              sendButton.style.display = 'none';
+            }, 2000);
           }
         });
         
