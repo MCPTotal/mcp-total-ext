@@ -46,7 +46,7 @@ class UIManager {
   }
   
   // Function to create the settings button with menu
-  createSettingsButton(toolCall, toolButton, sendButton) {
+  createSettingsButton(toolCall, toolButton) {
     // Create settings button (shown when send button is hidden)
     const settingsButton = document.createElement('button');
     settingsButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
@@ -114,7 +114,7 @@ class UIManager {
     settingsContainer.appendChild(settingsButton);
     settingsContainer.appendChild(settingsMenu);
     
-    return settingsContainer;
+    return {settingsContainer, settingsButton};
   }
   
   // Create the settings menu with the three mode options
@@ -488,191 +488,10 @@ class UIManager {
       box-shadow: 0 1px 3px rgba(0,0,0,0.12);
     `;
     
+
     // Create a settings button (shown when send button is hidden)
-    const settingsButton = document.createElement('button');
-    settingsButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
-    settingsButton.title = "Tool settings";
-    settingsButton.style.cssText = `
-      background-color: #4b5563;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      padding: 6px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 500;
-      font-family: var(--font-family-sans, system-ui, sans-serif);
-      margin-left: 8px;
-      width: 28px;
-      height: 28px;
-      align-items: center;
-      justify-content: center;
-      display: inline-block;
-      transition: all 0.2s ease;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-    `;
-    
-    // Add hover effect to settings button
-    settingsButton.addEventListener('mouseover', () => {
-      settingsButton.style.backgroundColor = '#6b7280';
-    });
-    
-    settingsButton.addEventListener('mouseout', () => {
-      settingsButton.style.backgroundColor = '#4b5563';
-    });
-    
-    // Settings menu container (initially hidden)
-    const settingsMenu = document.createElement('div');
-    settingsMenu.className = 'tool-settings-menu';
-    settingsMenu.style.cssText = `
-      background-color: white;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 6px;
-      margin-top: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      display: none;
-      position: absolute;
-      z-index: 1000;
-      width: 180px;
-      right: 0;
-      overflow: hidden;
-    `;
-    
-    // Get saved preferences for this tool
-    const currentToolPrefs = this.getToolPreference(toolCall.tool);
-    const currentMode = currentToolPrefs.mode || 'manual';
-    
-    // Create a button option for the menu
-    const createModeButton = (label, value, currentMode, icon) => {
-      const button = document.createElement('button');
-      const isSelected = currentMode === value;
-      
-      button.innerHTML = `
-        <div style="display: flex; align-items: center;">
-          <span style="margin-right: 8px; color: ${isSelected ? '#4f46e5' : '#6b7280'};">${icon}</span>
-          <span>${label}</span>
-        </div>
-      `;
-      button.value = value;
-      
-      // Highlight the currently selected mode
-      button.style.cssText = `
-        width: 100%;
-        text-align: left;
-        padding: 10px 12px;
-        margin-bottom: 2px;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 14px;
-        background-color: ${isSelected ? '#f3f4f6' : 'transparent'};
-        color: ${isSelected ? '#4f46e5' : '#1f2937'};
-        font-weight: ${isSelected ? '500' : 'normal'};
-        font-family: var(--font-family-sans, system-ui, sans-serif);
-        transition: all 0.2s ease;
-        position: relative;
-        overflow: hidden;
-      `;
-      
-      // Add hover effect
-      button.addEventListener('mouseover', () => {
-        button.style.backgroundColor = isSelected ? '#f3f4f6' : '#f9fafb';
-      });
-      
-      button.addEventListener('mouseout', () => {
-        button.style.backgroundColor = isSelected ? '#f3f4f6' : 'transparent';
-      });
-      
-      // Click handler
-      button.addEventListener('click', () => {
-        // Save the preference
-        this.setToolPreference(toolCall.tool, { mode: value });
-        
-        // Close the menu
-        settingsMenu.style.display = 'none';
-        
-        // Apply the preference immediately
-        console.log(`📡 Setting tool ${toolCall.tool} mode to ${value}`);
-        
-        if (value === 'autorun' || value === 'autosend') {
-          // Run the tool if it's not already running
-          if (!toolButton.disabled) {
-            console.log(`📡 Auto-executing tool ${toolCall.tool} after mode change`);
-            toolButton.click();
-          }
-        }
-      });
-      
-      return button;
-    };
-    
-    // Add the three mode buttons with icons
-    const manualButton = createModeButton('Manual', 'manual', currentMode, 
-      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`);
-    
-    const autoRunButton = createModeButton('Auto-run', 'autorun', currentMode,
-      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`);
-    
-    const autoSendButton = createModeButton('Auto-run and send', 'autosend', currentMode,
-      `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path></svg>`);
-    
-    // Add buttons to menu
-    settingsMenu.appendChild(manualButton);
-    settingsMenu.appendChild(autoRunButton);
-    settingsMenu.appendChild(autoSendButton);
-    
-    // Add settings button click handler
-    settingsButton.addEventListener('click', (e) => {
-      e.stopPropagation(); // Prevent event bubbling
-      
-      // Toggle settings menu
-      const isVisible = settingsMenu.style.display === 'block';
-      settingsMenu.style.display = isVisible ? 'none' : 'block';
-      
-      // If opening the menu, refresh the button states based on current preference
-      if (!isVisible) {
-        // Get the current preference
-        const currentPref = this.getToolPreference(toolCall.tool);
-        const currentMode = currentPref.mode || 'manual';
-        
-        // Update visual state of all buttons
-        Array.from(settingsMenu.children).forEach(button => {
-          if (button.value === currentMode) {
-            // Selected option
-            button.style.backgroundColor = '#f3f4f6';
-            button.style.color = '#4f46e5';
-            button.style.fontWeight = '500';
-            
-            // Update icon color
-            const svgElement = button.querySelector('svg');
-            if (svgElement) {
-              svgElement.style.color = '#4f46e5';
-            }
-          } else {
-            // Non-selected options
-            button.style.backgroundColor = 'transparent';
-            button.style.color = '#1f2937';
-            button.style.fontWeight = 'normal';
-            
-            // Update icon color
-            const svgElement = button.querySelector('svg');
-            if (svgElement) {
-              svgElement.style.color = '#6b7280';
-            }
-          }
-        });
-      }
-    });
-    
-    // Close settings menu when clicking outside
-    document.addEventListener('click', (e) => {
-      if (settingsMenu.style.display === 'block' && 
-          !settingsMenu.contains(e.target) && 
-          e.target !== settingsButton) {
-        settingsMenu.style.display = 'none';
-      }
-    });
+    const {settingsContainer, settingsButton} = this.createSettingsButton(toolCall, toolButton);
+
     
     // Add hover effect to send button
     sendButton.addEventListener('mouseover', () => {
@@ -828,13 +647,6 @@ class UIManager {
     `;
     
     // Settings menu container
-    const settingsContainer = document.createElement('div');
-    settingsContainer.style.cssText = `
-      position: relative;
-    `;
-    settingsContainer.appendChild(settingsButton);
-    settingsContainer.appendChild(settingsMenu);
-    
     buttonRow.appendChild(toolButton);
     buttonRow.appendChild(sendButton);
     buttonRow.appendChild(settingsContainer);
