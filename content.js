@@ -1,7 +1,7 @@
 // CSP-Friendly ChatGPT API Monitor
 
 (function() {
-  console.log('🔍 Initalizing monitor script');
+  console.log('🔍 Initializing monitor script');
   
   // Store the last captured request/response pair
   let lastRequest = null;
@@ -12,12 +12,42 @@
   function createMonitorScript() {
     // Create an external script file in extension
     const script = document.createElement('script');
+    
+    // Check if we're in development mode by looking for debug-monitor.js
+    const debugUrl = chrome.runtime.getURL('debug-monitor.js');
+    const isDevMode = Boolean(debugUrl);
+    
+    try {
+      // Try to use debug-monitor.js if in development mode
+      if (isDevMode) {
+        script.src = debugUrl;
+        console.log('🔍 Development mode detected, using debug-monitor.js');
+      } else {
+        script.src = chrome.runtime.getURL('monitor.js');
+        console.log('🔍 Production mode detected, using bundled monitor.js');
+      }
+    } catch (error) {
+      // Fallback to production version
     script.src = chrome.runtime.getURL('monitor.js');
+      console.log('🔍 Error detecting mode, falling back to bundled monitor.js');
+    }
+    
+    // Get extension base URL
+    const extensionUrl = chrome.runtime.getURL('');
     
     // Listen for messages from the page script
     window.addEventListener('message', function(event) {
       // Only accept messages from the same frame
       if (event.source !== window) return;
+      
+      // Send extension URL when requested by debug monitor
+      if (event.data && event.data.type === 'REQUEST_EXTENSION_URL') {
+        console.log('🔍 Providing extension URL to debug monitor');
+        window.postMessage({
+          type: 'EXTENSION_URL',
+          url: extensionUrl
+        }, '*');
+      }
       
       // Check if it's our message
       if (event.data && event.data.type === 'API_MONITOR') {
@@ -47,7 +77,7 @@
     
     // Add the script to the page
     (document.head || document.documentElement).appendChild(script);
-    console.log('🔍 Monitor script added to page');
+    console.log(`🔍 Monitor script (${script.src}) added to page`);
   }
   
   // Expose functions to get the last captured request/response in the content script

@@ -32,7 +32,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["monitor.js"],
+      "resources": ["monitor.js", "debug-monitor.js", "src/*"],
       "matches": ["https://chat.openai.com/*", "https://chatgpt.com/*"]
     }
   ]
