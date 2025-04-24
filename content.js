@@ -13,16 +13,21 @@
     // Create an external script file in extension
     const script = document.createElement('script');
 
-    // Check if we're in development mode by looking for debug-monitor.js
-    const debugUrl = chrome.runtime.getURL('debug-monitor.js');
-    const isDevMode = Boolean(debugUrl);
+    // Check if we're in a production build - environment variable set by webpack
+    var isProduction = false;
+    try {
+      isProduction = process.env.IS_PRODUCTION;
+    } catch (error) {
+      console.log('🔍 Assuming development mode, error checking production mode:', error);
+    }
 
     try {
-      // Try to use debug-monitor.js if in development mode
-      if (isDevMode) {
-        script.src = debugUrl;
+      if (!isProduction) {
+        // Development mode - use debug-monitor.js
+        script.src = chrome.runtime.getURL('debug-monitor.js');
         console.log('🔍 Development mode detected, using debug-monitor.js');
       } else {
+        // Production mode - use bundled monitor.js
         script.src = chrome.runtime.getURL('monitor.js');
         console.log('🔍 Production mode detected, using bundled monitor.js');
       }

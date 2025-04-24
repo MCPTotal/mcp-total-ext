@@ -4,8 +4,8 @@
   "description": "Inject MCP tool definitions and handle tool calls when using ChatGPT in the browser",
   "main": "content.js",
   "scripts": {
-    "build": "NODE_ENV=production webpack --config webpack.config.js && esbuild content.js --bundle --minify --outdir=dist",
-    "build:dev": "webpack --config webpack.config.js --mode=development && esbuild content.js --bundle --outdir=dist",
+    "build": "NODE_ENV=production webpack --config webpack.config.js",
+    "build:dev": "webpack --config webpack.config.js --mode=development",
     "watch": "webpack --config webpack.config.js --mode=development --watch",
     "dev": "node scripts/dev.js",
     "package": "npm run build && node scripts/package.js",
