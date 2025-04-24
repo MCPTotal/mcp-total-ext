@@ -259,26 +259,16 @@ class UIManager {
     });
   }
 
-  drawToolResultButton(toolCall, executeToolCall) {
+  getToolCallElement(toolCall) {
     // Find the latest message container
     const messageContainers = document.querySelectorAll('[data-message-author-role="assistant"]');
     if (messageContainers.length === 0) return;
     
     const latestMessage = messageContainers[messageContainers.length - 1];
     
-    // Create a unique ID for this tool call button based on tool name and parameters
-    const toolId = `tool-${toolCall.tool}-${JSON.stringify(toolCall.parameters).replace(/[^\w]/g, '')}`;
-    console.log(`📡 Drawing tool result button for tool22: ${toolCall.tool}`);
-
-    // Check if we already injected a button for this specific tool call
-    if (latestMessage.querySelector(`.tool-result-button[data-tool-id="${toolId}"]`)) {
-      console.log(`📡 Button for tool ${toolCall.tool} with these parameters already exists`);
-      return;
-    }
-    
     // Find the SPECIFIC tool call text matching this tool call
     const markdownElements = latestMessage.querySelectorAll('.markdown p, .prose p');
-    let toolCallElement = null;
+    var toolCallElement = null;
     let toolCallText = '';
     let toolCallPattern = '';
     
@@ -320,23 +310,95 @@ class UIManager {
         if (toolCallElement) break;
       }
     }
+    return {toolCallElement, toolCallText};
+  }  
+
+  // Execute the tool and update UI accordingly
+  async executeToolAndUpdateUI(toolCall, executeToolCall, toolButton, resultElement, settingsButton, sendButton, originalToolName, hasBeenExecuted, currentResult) {
+    // Prevent double execution during tool running
+    if (hasBeenExecuted && toolButton.disabled) {
+      console.log('📡 Tool already being executed, please wait');
+      return null;
+    }
+    
+    try {
+      // Mark as in progress
+      hasBeenExecuted = true;
+      toolButton.disabled = true;
+      
+      // Change to loading state
+      toolButton.textContent = 'Running...';
+      
+      // Execute tool and capture result
+      let toolResult = executeToolCall(toolCall.tool, toolCall.parameters);
+      
+      // Handle promise result
+      if (toolResult && typeof toolResult === 'object' && typeof toolResult.then === 'function') {
+        console.log('📡 Tool returned a Promise, waiting for resolution');
+        try {
+          toolResult = await toolResult;
+        } catch (promiseError) {
+          throw promiseError;
+        }
+      }
+      
+      // Store the result
+      currentResult = toolResult;
+      
+      // Update UI with result
+      resultElement.style.color = '';
+      const resultText = typeof currentResult === 'string' ? currentResult : JSON.stringify(currentResult, null, 2);
+      resultElement.textContent = resultText;
+      resultElement.style.display = 'block';
+      
+      // Show send button after successful execution
+      sendButton.style.display = 'inline-block';
+      // Hide settings button when send button is shown
+      settingsButton.style.display = 'none';
+      
+      // Check if we should auto-send based on tool preferences
+      const currentToolPrefs = this.getToolPreference(toolCall.tool);
+      if (currentToolPrefs.mode === 'autosend') {
+        console.log(`📡 Auto-sending result for tool ${toolCall.tool}`);
+        // Small delay to let user see the result before sending
+        setTimeout(() => {
+          if (!sendButton.disabled) {
+            sendButton.click();
+          }
+        }, 1000);
+      }
+      
+      // Update button states and text
+      if (toolButton.textContent.startsWith('Re-run')) {
+        // Already has the "Re-run" prefix, don't add it again
+        toolButton.textContent = originalToolName;
+      } else {
+        toolButton.textContent = 'Re-run ' + originalToolName;
+      }
+      toolButton.disabled = false;
+      
+      return { currentResult, hasBeenExecuted };
+    } catch (e) {
+      console.error('📡 Error executing tool:', e);
+      resultElement.textContent = `Error: ${e.message}`;
+      resultElement.style.display = 'block';
+      resultElement.style.color = '#dc3545';
+      
+      // Re-enable button
+      toolButton.disabled = false;
+      toolButton.textContent = 'Retry';
+      hasBeenExecuted = false;
+      return { currentResult: null, hasBeenExecuted };
+    }
+  }
+
+  drawToolResultButton(toolCall, executeToolCall) {
+    const {toolCallElement, toolCallText} = this.getToolCallElement(toolCall);
     
     if (!toolCallElement) {
       console.log('📡 Could not find tool call text element');
       return;
     }
-    
-    // Create container for buttons
-    const container = document.createElement('div');
-    container.className = 'tool-result-button';
-    container.setAttribute('data-tool-id', toolId);
-    container.style.cssText = `
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      margin-top: 8px;
-      margin-bottom: 8px;
-    `;
     
     // Format parameters for display
     const formatParams = () => {
@@ -491,7 +553,6 @@ class UIManager {
 
     // Create a settings button (shown when send button is hidden)
     const {settingsContainer, settingsButton} = this.createSettingsButton(toolCall, toolButton);
-
     
     // Add hover effect to send button
     sendButton.addEventListener('mouseover', () => {
@@ -501,85 +562,6 @@ class UIManager {
     sendButton.addEventListener('mouseout', () => {
       sendButton.style.backgroundColor = '#6d28d9';
     });
-    
-    // Function to execute the tool and update UI
-    const executeAndUpdateUI = async () => {
-      // Prevent double execution during tool running
-      if (hasBeenExecuted && toolButton.disabled) {
-        console.log('📡 Tool already being executed, please wait');
-        return;
-      }
-      
-      try {
-        // Mark as in progress
-        hasBeenExecuted = true;
-        toolButton.disabled = true;
-        
-        // Change to loading state
-        toolButton.textContent = 'Running...';
-        
-        // Execute tool and capture result
-        let toolResult = executeToolCall(toolCall.tool, toolCall.parameters);
-        
-        // Handle promise result
-        if (toolResult && typeof toolResult === 'object' && typeof toolResult.then === 'function') {
-          console.log('📡 Tool returned a Promise, waiting for resolution');
-          try {
-            toolResult = await toolResult;
-          } catch (promiseError) {
-            throw promiseError;
-          }
-        }
-        
-        // Store the result
-        currentResult = toolResult;
-        
-        // Update UI with result
-        resultElement.style.color = '';
-        const resultText = typeof currentResult === 'string' ? currentResult : JSON.stringify(currentResult, null, 2);
-        resultElement.textContent = resultText;
-        resultElement.style.display = 'block';
-        
-        // Show send button after successful execution
-        sendButton.style.display = 'inline-block';
-        // Hide settings button when send button is shown
-        settingsButton.style.display = 'none';
-        
-        // Check if we should auto-send based on tool preferences
-        const currentToolPrefs = this.getToolPreference(toolCall.tool);
-        if (currentToolPrefs.mode === 'autosend') {
-          console.log(`📡 Auto-sending result for tool ${toolCall.tool}`);
-          // Small delay to let user see the result before sending
-          setTimeout(() => {
-            if (!sendButton.disabled) {
-              sendButton.click();
-            }
-          }, 1000);
-        }
-        
-        // Update button states and text
-        if (toolButton.textContent.startsWith('Re-run')) {
-          // Already has the "Re-run" prefix, don't add it again
-          toolButton.textContent = originalToolName;
-        } else {
-          toolButton.textContent = 'Re-run ' + originalToolName;
-        }
-        toolButton.disabled = false;
-        
-        return currentResult;
-      } catch (e) {
-        console.error('📡 Error executing tool:', e);
-        resultElement.textContent = `Error: ${e.message}`;
-        resultElement.style.display = 'block';
-        resultElement.style.color = '#dc3545';
-        
-        // Re-enable button
-        toolButton.disabled = false;
-        toolButton.textContent = 'Retry';
-        hasBeenExecuted = false;
-        return null;
-      }
-    };
     
     // Add click handler to the tool button
     toolButton.addEventListener('click', () => {
@@ -600,7 +582,23 @@ class UIManager {
         resultElement.style.color = '#6c757d';
         
         // Execute after a very short delay to allow visual transition
-        setTimeout(() => executeAndUpdateUI(), 50);
+        setTimeout(async () => {
+          const result = await this.executeToolAndUpdateUI(
+            toolCall,
+            executeToolCall,
+            toolButton,
+            resultElement,
+            settingsButton,
+            sendButton,
+            originalToolName,
+            hasBeenExecuted,
+            currentResult
+          );
+          if (result) {
+            currentResult = result.currentResult;
+            hasBeenExecuted = result.hasBeenExecuted;
+          }
+        }, 50);
       }, 50);
     });
     
@@ -667,8 +665,6 @@ class UIManager {
     toolsContainer.appendChild(editableResult);
 
 
-
-
      // Now we need to specifically replace just that tool call, not the entire element
      if (toolCallText && toolCallElement) {
       // Create a placeholder element with a unique ID to replace the tool call text
@@ -710,25 +706,25 @@ class UIManager {
       toolCallElement.appendChild(originalText);
       toolCallElement.appendChild(toolsContainer);
     }
+
+     // Auto-run the tool if preferences are set
+     const savedToolPrefs = this.getToolPreference(toolCall.tool);
+     if (savedToolPrefs.mode === 'autorun' || savedToolPrefs.mode === 'autosend') {
+       console.log(`📡 Auto-running tool ${toolCall.tool} (mode: ${savedToolPrefs.mode})`);
+       // Execute with a slight delay to allow the UI to render first
+       setTimeout(() => {
+         // This would trigger the tool button click
+         console.log(`📡 Auto-executing tool ${toolCall.tool}`);
+         toolButton.click();
+       }, 500);
+     }
   }
   
   // Inject a button into the UI to send the tool result
   injectToolResultButton(toolCall, executeToolCall) {
     try {
       console.log(`📡 Injecting button for tool: ${toolCall.tool}`);
-
       this.drawToolResultButton(toolCall, executeToolCall);
-      
-      // Auto-run the tool if preferences are set
-      const savedToolPrefs = this.getToolPreference(toolCall.tool);
-      if (savedToolPrefs.mode === 'autorun' || savedToolPrefs.mode === 'autosend') {
-        console.log(`📡 Auto-running tool ${toolCall.tool} (mode: ${savedToolPrefs.mode})`);
-        // Execute with a slight delay to allow the UI to render first
-        setTimeout(() => {
-          // This would trigger the tool button click
-          console.log(`📡 Auto-executing tool ${toolCall.tool}`);
-        }, 500);
-      }
     } catch (e) {
       console.error('📡 Error injecting button:', e);
     }
