@@ -1,7 +1,7 @@
 // Debug-friendly monitor script that dynamically loads the source modules
-(function() {
+(function () {
   console.log('📡 MONITOR SCRIPT LOADED (DEBUG MODE)');
-  
+
   /**
    * This is a special development version of the monitor script
    * that dynamically loads the source modules instead of being bundled.
@@ -9,19 +9,19 @@
    * It allows for easier debugging by keeping the original source structure
    * and avoiding the need to rebuild after each change.
    */
-  
+
   // Extension base URL for web-accessible resources (will be injected by content.js)
   let EXTENSION_URL = '';
-  
+
   // Helper function to dynamically import a module
   async function importModule(modulePath) {
     // Create a unique script ID for this import
     const moduleId = 'module_' + Math.random().toString(36).substring(2);
-    
+
     // Full URL to the resource with proper URL construction
     const url = new URL(modulePath, EXTENSION_URL).href;
     console.log(`📡 Loading module from: ${url}`);
-    
+
     // Return a promise that resolves when the script is loaded
     return new Promise((resolve, reject) => {
       // Create a script element to load the module
@@ -39,101 +39,101 @@
         console.error(`📡 Failed to load module: ${modulePath}`, error);
         reject(error);
       };
-      
+
       // Add the script to the page
       document.head.appendChild(script);
     });
   }
-  
+
   // Load utility functions
   async function init() {
     try {
       // First load the module loader utility
-      const moduleLoader = await importModule('src/modules/module-loader.js');
-      
+      await importModule('src/modules/module-loader.js');
+
       // Then load all other modules
       const utils = await importModule('src/modules/utils.js');
       const ToolManager = await importModule('src/modules/ToolManager.js');
       const McpManager = await importModule('src/modules/McpManager.js');
       const UIManager = await importModule('src/modules/UIManager.js');
       const debugHelpers = await importModule('src/modules/debug-helpers.js');
-      
+
       // Extract utility functions
-      const { uuidv4, sendMessage } = utils;
-      
+      const { sendMessage } = utils;
+
       // Initialize components
       const uiManager = new UIManager();
       const toolManager = new ToolManager(uiManager);
       const mcpManager = new McpManager(toolManager);
-      
+
       // Store instances in window for debugging
       window.toolManager = toolManager;
       window.mcpManager = mcpManager;
       window.uiManager = uiManager;
       window.debugHelpers = debugHelpers;
-      
+
       // Start MCP polling
       mcpManager.startPolling();
-      
+
       // Listen for messages from content script
-      window.addEventListener('message', function(event) {
+      window.addEventListener('message', function (event) {
         if (event.source !== window) return;
-        
+
         if (event.data && event.data.type === 'API_MONITOR_CHECK') {
           sendMessage('LOADED', { timestamp: new Date().toISOString() });
         }
       });
-      
+
       // Expose public API to window
-      window.sendManualToolResult = function(toolName, result) {
+      window.sendManualToolResult = function (toolName, result) {
         if (!toolManager.state.lastToolCall) {
           console.error('📡 No tool call information available');
           return;
         }
-        
+
         const toolCall = {
           tool: toolName || toolManager.state.lastToolCall.toolName,
           parameters: toolManager.state.lastToolCall.parameters
         };
-        
+
         uiManager.sendToolResult(toolCall, result || toolManager.state.lastToolCall.result);
       };
-      
+
       window.configureTools = () => toolManager.updateSystemSettingsWithTools();
-      
-      window.addNewTool = function(name, description, parameters = {}, callback) {
+
+      window.addNewTool = function (name, description, parameters = {}, callback) {
         return toolManager.registerTool(name, description, parameters, callback);
       };
-      
-      window.removeTool = function(name) {
+
+      window.removeTool = function (name) {
         return toolManager.unregisterTool(name);
       };
-      
-      window.getExtractedParameters = function() {
-        return toolManager.state.extractedParameters || 
-               toolManager.state.lastToolCall?.extractedParameters || {};
+
+      window.getExtractedParameters = function () {
+        return toolManager.state.extractedParameters ||
+          toolManager.state.lastToolCall?.extractedParameters || {};
       };
-      
+
       window.addMcpServer = (config) => mcpManager.addServer(config);
       window.removeMcpServer = (id) => mcpManager.removeServer(id);
       window.setMcpServerStatus = (id, enabled) => mcpManager.setServerStatus(id, enabled);
       window.getMcpServers = () => mcpManager.getServers();
       window.fetchMcpToolDefinitions = () => mcpManager.fetchToolDefinitions();
-      
+
       // Send startup message
       sendMessage('MONITOR_STARTED', { version: '1.0.0' });
-      
+
       console.log('📡 DEBUG Monitor active - Source Modules Loaded');
       console.log('📡 Debug helpers available - Try window.debugHelpers.listRegisteredTools()');
     } catch (error) {
       console.error('📡 Error initializing monitor:', error);
     }
   }
-  
+
   // Listen for extension URL from content script
-  window.addEventListener('message', function(event) {
+  window.addEventListener('message', function (event) {
     if (event.source !== window) return;
-    
+
     if (event.data && event.data.type === 'EXTENSION_URL') {
       EXTENSION_URL = event.data.url;
       console.log(`📡 Received extension URL: ${EXTENSION_URL}`);
@@ -141,7 +141,7 @@
       init();
     }
   });
-  
+
   // Send message to request extension URL
   window.postMessage({ type: 'REQUEST_EXTENSION_URL' }, '*');
-})(); 
+})();

@@ -92,16 +92,73 @@ Debug mode can be helpful when:
 
 - `manifest.json`: Extension configuration
 - `content.js`: Main script that intercepts API calls and handles tools
-- `options.html/js`: Settings UI for configuring tools
-- `utils/`: Utility functions including logger
-- `icons/`: Extension icons
+- `src/`: Source code directory
+  - `main.js`: Entry point for the extension
+  - `modules/`: Core modules
+    - `ToolManager.js`: Manages tool definitions and execution
+    - `UIManager.js`: Handles UI interactions and rendering
+    - `utils.js`: Utility functions
+- `scripts/`: Build and development scripts
+- `tests/`: Unit and integration tests
+- `dist/`: Build output (not in repo)
 
-### Limitations
+### Technology Stack
 
-- Streaming responses not yet supported (in v0)
-- Only supports a single tool call per response
-- No function calling chains (one loop max)
-- Firefox/Safari not supported yet
+- **TypeScript/JavaScript**: Core language
+- **Jest**: Testing framework
+- **ESLint/Prettier**: Code quality and formatting
+- **Webpack**: Module bundling
+- **Babel**: Transpilation
+- **GitHub Actions**: CI/CD
+
+### Development Workflow
+
+1. **Setup**:
+   ```
+   git clone [repository-url]
+   cd mcp-tools-for-chatgpt
+   npm install
+   ```
+
+2. **Development Mode**:
+   ```
+   npm run dev
+   ```
+   This starts a watcher that automatically rebuilds on file changes.
+
+3. **Building**:
+   ```
+   npm run build
+   ```
+   Builds the extension in production mode.
+
+4. **Testing**:
+   ```
+   npm test
+   ```
+   Runs the test suite.
+
+5. **Linting**:
+   ```
+   npm run lint
+   ```
+   Checks code quality.
+
+6. **Formatting**:
+   ```
+   npm run format
+   ```
+   Formats code with Prettier.
+
+7. **Packaging**:
+   ```
+   npm run package
+   ```
+   Creates a distributable ZIP file.
+
+### Contributing
+
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on contributing to this project.
 
 ## Security & Privacy
 

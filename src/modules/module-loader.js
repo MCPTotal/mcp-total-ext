@@ -1,13 +1,13 @@
 /**
  * Module Loader Utility
- * 
+ *
  * This provides a standardized way to expose modules for both CommonJS (webpack)
  * and direct browser usage in debug mode.
- * 
+ *
  * Usage:
- * 
+ *
  * At the end of each module file, add:
- * 
+ *
  * // Export the module
  * exposeModule(MyModuleName);
  */
@@ -18,7 +18,7 @@ function exposeModule(moduleExport) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = moduleExport;
   }
-  
+
   // For direct browser usage in debug mode
   // Get the script ID to expose this module with correct name
   const currentScript = document.currentScript;
@@ -33,4 +33,4 @@ function exposeModule(moduleExport) {
 const currentScript = document.currentScript;
 if (currentScript && currentScript.id) {
   window[currentScript.id] = { exposeModule };
-} 
+}

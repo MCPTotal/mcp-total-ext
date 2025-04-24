@@ -1,69 +1,72 @@
-(function() {
+(function () {
   console.log('📡 MONITOR SCRIPT LOADED');
-  
+
   // Import modules
-  const { uuidv4, sendMessage } = require('./modules/utils');
+  const { sendMessage } = require('./modules/utils');
   const ToolManager = require('./modules/ToolManager');
   const McpManager = require('./modules/McpManager');
   const UIManager = require('./modules/UIManager');
-  
+
   // ==============================
   // Main Initialization
   // ==============================
   const uiManager = new UIManager();
   const toolManager = new ToolManager(uiManager);
   const mcpManager = new McpManager(toolManager);
-  
+
   // Start MCP polling
   mcpManager.startPolling();
-  
+
   // Listen for messages from content script
-  window.addEventListener('message', function(event) {
+  window.addEventListener('message', function (event) {
     if (event.source !== window) return;
-    
+
     if (event.data && event.data.type === 'API_MONITOR_CHECK') {
       sendMessage('LOADED', { timestamp: new Date().toISOString() });
     }
   });
-  
+
   // Expose public API to window
-  window.sendManualToolResult = function(toolName, result) {
+  window.sendManualToolResult = function (toolName, result) {
     if (!toolManager.state.lastToolCall) {
       console.error('📡 No tool call information available');
       return;
     }
-    
+
     const toolCall = {
       tool: toolName || toolManager.state.lastToolCall.toolName,
-      parameters: toolManager.state.lastToolCall.parameters
+      parameters: toolManager.state.lastToolCall.parameters,
     };
-    
+
     uiManager.sendToolResult(toolCall, result || toolManager.state.lastToolCall.result);
   };
-  
+
   window.configureTools = () => toolManager.updateSystemSettingsWithTools();
-  
-  window.addNewTool = function(name, description, parameters = {}, callback) {
+
+  window.addNewTool = function (name, description, parameters = {}, callback) {
     return toolManager.registerTool(name, description, parameters, callback);
   };
-  
-  window.removeTool = function(name) {
+
+  window.removeTool = function (name) {
     return toolManager.unregisterTool(name);
   };
-  
-  window.getExtractedParameters = function() {
-    return toolManager.state.extractedParameters || 
-           toolManager.state.lastToolCall?.extractedParameters || {};
+
+  window.getExtractedParameters = function () {
+    return (
+      toolManager.state.extractedParameters ||
+      toolManager.state.lastToolCall?.extractedParameters ||
+      {}
+    );
   };
-  
-  window.addMcpServer = (config) => mcpManager.addServer(config);
-  window.removeMcpServer = (id) => mcpManager.removeServer(id);
+
+  window.addMcpServer = config => mcpManager.addServer(config);
+  window.removeMcpServer = id => mcpManager.removeServer(id);
   window.setMcpServerStatus = (id, enabled) => mcpManager.setServerStatus(id, enabled);
   window.getMcpServers = () => mcpManager.getServers();
   window.fetchMcpToolDefinitions = () => mcpManager.fetchToolDefinitions();
-  
+
   // Send startup message
   sendMessage('MONITOR_STARTED', { version: '1.0.0' });
-  
+
   console.log('📡 API Monitor active - Modular Architecture');
-})(); 
+})();

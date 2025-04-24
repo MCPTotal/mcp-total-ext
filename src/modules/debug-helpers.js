@@ -18,16 +18,18 @@ function listRegisteredTools() {
     console.error('📡 ToolManager not available');
     return [];
   }
-  
+
   const tools = window.toolManager.tools;
-  console.table(tools.map(tool => ({
-    name: tool.name,
-    description: tool.description.slice(0, 50) + (tool.description.length > 50 ? '...' : ''),
-    paramCount: Object.keys(tool.parameters.properties || {}).length,
-    isManual: tool.isManual,
-    isBuiltIn: tool.isBuiltIn
-  })));
-  
+  console.table(
+    tools.map(tool => ({
+      name: tool.name,
+      description: tool.description.slice(0, 50) + (tool.description.length > 50 ? '...' : ''),
+      paramCount: Object.keys(tool.parameters.properties || {}).length,
+      isManual: tool.isManual,
+      isBuiltIn: tool.isBuiltIn,
+    }))
+  );
+
   return tools;
 }
 
@@ -37,7 +39,7 @@ function showToolManagerState() {
     console.error('📡 ToolManager not available');
     return null;
   }
-  
+
   console.log('Current ToolManager state:', window.toolManager.state);
   return window.toolManager.state;
 }
@@ -48,18 +50,21 @@ function testTool(toolName, parameters = {}) {
     console.error('📡 ToolManager not available');
     return;
   }
-  
+
   const tool = window.toolManager.tools.find(t => t.name === toolName);
   if (!tool) {
     console.error(`📡 Tool '${toolName}' not found`);
     return;
   }
-  
+
   console.log(`📡 Testing tool '${toolName}' with parameters:`, parameters);
-  window.toolManager.executeToolCall({
-    tool: toolName,
-    parameters
-  }, true);
+  window.toolManager.executeToolCall(
+    {
+      tool: toolName,
+      parameters,
+    },
+    true
+  );
 }
 
 // Create the module exports
@@ -67,7 +72,7 @@ const debugHelpers = {
   isToolRegistered,
   listRegisteredTools,
   showToolManagerState,
-  testTool
+  testTool,
 };
 
 // Use the standardized module exporter
@@ -79,10 +84,10 @@ if (typeof exposeModule === 'function') {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = debugHelpers;
   }
-  
+
   // For direct browser usage in debug mode
   const currentScript = document.currentScript;
   if (currentScript && currentScript.id) {
     window[currentScript.id] = debugHelpers;
   }
-} 
+}

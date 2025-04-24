@@ -5,19 +5,29 @@ module.exports = {
   entry: './src/main.js',
   output: {
     filename: 'monitor.js',
-    path: path.resolve(__dirname, '.'),
+    path: path.resolve(__dirname, 'dist'),
   },
-  // Enable source maps for easier debugging
+  // Enable source maps for easier debugging in development mode
   devtool: process.env.NODE_ENV === 'production' ? false : 'eval-source-map',
+  resolve: {
+    extensions: ['.ts', '.js'],
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+    },
+  },
   module: {
     rules: [
+      // JavaScript and TypeScript
       {
-        test: /\.js$/,
+        test: /\.(js|ts)$/,
         exclude: /node_modules/,
         use: {
           loader: 'babel-loader',
           options: {
-            presets: ['@babel/preset-env']
+            presets: [
+              '@babel/preset-env',
+              '@babel/preset-typescript',
+            ]
           }
         }
       }
@@ -27,5 +37,12 @@ module.exports = {
   watchOptions: {
     poll: true,
     ignored: /node_modules/
+  },
+  optimization: {
+    // Only minimize in production
+    minimize: process.env.NODE_ENV === 'production',
+  },
+  performance: {
+    hints: process.env.NODE_ENV === 'production' ? 'warning' : false,
   }
-}; 
+};
