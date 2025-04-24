@@ -310,19 +310,10 @@ class McpManager {
   }
 }
 
-// Use the standardized module exporter
 if (typeof exposeModule === 'function') {
   exposeModule(McpManager);
 } else {
-  // Fallback for when the module loader isn't available
-  // For CommonJS environments (webpack bundling)
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = McpManager;
-  }
-
-  // For direct browser usage in debug mode
-  const currentScript = document.currentScript;
-  if (currentScript && currentScript.id) {
-    window[currentScript.id] = McpManager;
   }
 }
