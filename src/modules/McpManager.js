@@ -2,7 +2,7 @@
 // McpManager Class
 // ==============================
 class McpManager {
-  constructor(toolManager) {
+  constructor(toolManager, mcpUI) {
     this.toolManager = toolManager;
     this.servers = [
       {
@@ -15,6 +15,20 @@ class McpManager {
     this.pollingInterval = 60000; // How often to refresh tool definitions (in ms)
     this.lastFetchTime = 0;
     this.activeFetch = false;
+    
+    // Initialize the UI manager
+    this.ui = mcpUI;
+    
+    // Setup dependencies
+    if (this.ui) {
+      this.ui.setMcpManager(this);
+      this.ui.setShowServerConfigCallback(() => this.showServerConfigUI());
+      
+      // Add keyboard shortcut for quick access to server config
+      this.ui.setupKeyboardShortcut();
+    } else {
+      console.error('📡 McpManager: No UI manager provided');
+    }
   }
 
   addServer(serverConfig) {
@@ -66,6 +80,48 @@ class McpManager {
     return [...this.servers];
   }
 
+  /**
+   * Shows a configuration UI for MCP servers
+   * @returns {void}
+   */
+  showServerConfigUI() {
+    if (this.ui) {
+      this.ui.showServerConfigUI();
+    } else {
+      console.error('📡 McpManager: Cannot show server config UI - UI manager not set');
+    }
+  }
+  
+  /**
+   * Test connection to an MCP server
+   * @param {Object} server - Server configuration
+   * @returns {Promise<boolean>} - True if connection successful
+   */
+  async testServerConnection(server) {
+    try {
+      const url = new URL('/status', server.url).href;
+      
+      const headers = {};
+      if (server.apiKey) {
+        headers['Authorization'] = `Bearer ${server.apiKey}`;
+      }
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Server returned status ${response.status}`);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error(`📡 Connection test failed for ${server.id}:`, error);
+      throw new Error(`Connection failed: ${error.message}`);
+    }
+  }
+
   startPolling() {
     this.fetchToolDefinitions();
     setInterval(() => this.fetchToolDefinitions(), this.pollingInterval);
@@ -107,12 +163,25 @@ class McpManager {
       // Add MCP tools for each enabled server
       for (const server of enabledServers) {
         try {
-          console.log(`📡 Generating tools for MCP server ${server.id}`);
-
-          const mockTools = this.generateMockToolsForServer(server);
+          console.log(`📡 Fetching tools for MCP server ${server.id} from ${server.url}`);
+          
+          let toolDefinitions = [];
+          
+          // Try to fetch real tool definitions from the server
+          if (server.url && server.url !== 'https://api.mcp.example.com') {
+            try {
+              toolDefinitions = await this.fetchToolsFromServer(server);
+              console.log(`📡 Successfully fetched ${toolDefinitions.length} tools from ${server.id}`);
+            } catch (error) {
+              console.error(`📡 Error fetching tools from server ${server.id}:`, error);
+            }
+          } else {
+            // Use mock tools for demo server
+            toolDefinitions = this.generateMockToolsForServer(server);
+          }
 
           // Process and add each tool with the server prefix
-          mockTools.forEach(tool => {
+          toolDefinitions.forEach(tool => {
             // Create a standardized tool definition
             const mcpToolName = `mcp_${server.id}_${tool.name}`;
             const description = `[${server.id}] ${tool.description}`;
@@ -125,7 +194,7 @@ class McpManager {
             this.toolManager.registerTool(mcpToolName, description, parameters, callback);
           });
 
-          console.log(`📡 Generated ${mockTools.length} tools for MCP server ${server.id}`);
+          console.log(`📡 Added ${toolDefinitions.length} tools for MCP server ${server.id}`);
         } catch (error) {
           console.error(`📡 Error processing tools from MCP server ${server.id}:`, error);
         }
@@ -142,6 +211,51 @@ class McpManager {
       console.error('📡 Error fetching MCP tool definitions:', error);
     } finally {
       this.activeFetch = false;
+    }
+  }
+  
+  /**
+   * Fetch tool definitions from a real MCP server
+   * @param {Object} server - Server configuration object
+   * @returns {Promise<Array>} - Array of tool definitions
+   */
+  async fetchToolsFromServer(server) {
+    try {
+      const url = new URL('/tools', server.url).href;
+      
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+      
+      // Add API key to headers if available
+      if (server.apiKey) {
+        headers['Authorization'] = `Bearer ${server.apiKey}`;
+      }
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      // Process the response based on MCP standard format
+      // Expecting: { tools: [...] } or directly an array of tools
+      const tools = Array.isArray(data) ? data : (data.tools || []);
+      
+      return tools.map(tool => ({
+        name: tool.name || tool.function_name || tool.id,
+        description: tool.description || tool.summary || '',
+        parameters: tool.parameters || tool.schema || {}
+      }));
+    } catch (error) {
+      console.error(`📡 Error fetching tools from ${server.url}:`, error);
+      throw error;
     }
   }
 
@@ -229,8 +343,83 @@ class McpManager {
       parameters
     );
 
-    // Due to CSP restrictions, we'll use a mock implementation instead of actual API calls
-    return this.generateMockToolResult(serverId, mcpToolName, parameters);
+    // Check if this is a real server or a demo server
+    if (server.url && server.url !== 'https://api.mcp.example.com') {
+      try {
+        // Call the real MCP server
+        return await this.executeToolOnServer(server, mcpToolName, parameters);
+      } catch (error) {
+        console.error(`📡 Error executing tool on server ${serverId}:`, error);
+        return `Error executing tool on server ${serverId}: ${error.message}`;
+      }
+    } else {
+      // Use mock implementation for demo servers
+      return this.generateMockToolResult(serverId, mcpToolName, parameters);
+    }
+  }
+  
+  /**
+   * Execute a tool on a real MCP server
+   * @param {Object} server - Server configuration
+   * @param {string} toolName - Name of the tool to execute
+   * @param {Object} parameters - Tool parameters
+   * @returns {Promise<string>} - Tool execution result
+   */
+  async executeToolOnServer(server, toolName, parameters) {
+    try {
+      const url = new URL(`/tools/${encodeURIComponent(toolName)}/execute`, server.url).href;
+      
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+      
+      // Add API key to headers if available
+      if (server.apiKey) {
+        headers['Authorization'] = `Bearer ${server.apiKey}`;
+      }
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ parameters })
+      });
+      
+      if (!response.ok) {
+        let errorText = `HTTP Error ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorText = errorData.error || errorData.message || errorText;
+        } catch (e) {
+          // If we can't parse the error as JSON, try to get text
+          errorText = await response.text() || errorText;
+        }
+        throw new Error(errorText);
+      }
+      
+      // Try to parse the response as JSON
+      const data = await response.json();
+      
+      // Handle different response formats:
+      // 1. { result: "text result" }
+      // 2. { output: "text result" }
+      // 3. Just a string
+      // 4. Any other object -> stringify it nicely
+      
+      if (typeof data === 'string') {
+        return data;
+      } else if (data.result !== undefined) {
+        return data.result;
+      } else if (data.output !== undefined) {
+        return data.output;
+      } else {
+        // Format the entire object as a readable string
+        return JSON.stringify(data, null, 2);
+      }
+    } catch (error) {
+      console.error(`📡 Error executing tool on ${server.url}:`, error);
+      throw error;
+    }
   }
 
   generateMockToolResult(serverId, toolName, parameters) {
@@ -307,6 +496,12 @@ class McpManager {
 
     // Generic fallback response
     return `Executed ${toolName} on ${serverId} with parameters: ${JSON.stringify(parameters)}\n\nMock response generated for demonstration purposes.`;
+  }
+
+  showServerSelectionNotification() {
+    if (this.ui) {
+      this.ui.showServerSelectionNotification();
+    }
   }
 }
 

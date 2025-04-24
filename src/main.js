@@ -6,13 +6,14 @@
   const ToolManager = require('./modules/ToolManager');
   const McpManager = require('./modules/McpManager');
   const UIManager = require('./modules/UIManager');
-
+  const McpUI = require('./modules/McpUI');
   // ==============================
   // Main Initialization
   // ==============================
   const uiManager = new UIManager();
   const toolManager = new ToolManager(uiManager);
-  const mcpManager = new McpManager(toolManager);
+  const mcpUI = new McpUI();
+  const mcpManager = new McpManager(toolManager, mcpUI);
 
   // Start MCP polling
   mcpManager.startPolling();

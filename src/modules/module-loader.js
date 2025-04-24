@@ -24,7 +24,6 @@ function exposeModule(moduleExport) {
   const currentScript = document.currentScript;
   if (currentScript && currentScript.id) {
     window[currentScript.id] = moduleExport;
-    console.log(`📡 Module exposed as window.${currentScript.id}`);
   }
 }
 

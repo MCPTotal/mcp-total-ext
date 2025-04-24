@@ -20,7 +20,6 @@
 
     // Full URL to the resource with proper URL construction
     const url = new URL(modulePath, EXTENSION_URL).href;
-    console.log(`📡 Loading module from: ${url}`);
 
     // Return a promise that resolves when the script is loaded
     return new Promise((resolve, reject) => {
@@ -29,7 +28,6 @@
       script.id = moduleId;
       script.src = url;
       script.onload = () => {
-        console.log(`📡 Module loaded: ${modulePath}`);
         // When the script is loaded, resolve the promise with the module exports
         resolve(window[moduleId]);
         // Cleanup
@@ -51,11 +49,12 @@
       // First load the module loader utility
       await importModule('src/modules/module-loader.js');
 
-      // Then load all other modules
+      // Then load all other modules in the correct dependency order
       const utils = await importModule('src/modules/utils.js');
-      const ToolManager = await importModule('src/modules/ToolManager.js');
-      const McpManager = await importModule('src/modules/McpManager.js');
       const UIManager = await importModule('src/modules/UIManager.js');
+      const ToolManager = await importModule('src/modules/ToolManager.js');
+      const McpUI = await importModule('src/modules/McpUI.js');
+      const McpManager = await importModule('src/modules/McpManager.js');
       const debugHelpers = await importModule('src/modules/debug-helpers.js');
 
       // Extract utility functions
@@ -64,12 +63,16 @@
       // Initialize components
       const uiManager = new UIManager();
       const toolManager = new ToolManager(uiManager);
-      const mcpManager = new McpManager(toolManager);
+      
+      // Create McpUI instance first, then pass it to McpManager
+      const mcpUI = new McpUI();
+      const mcpManager = new McpManager(toolManager, mcpUI);
 
       // Store instances in window for debugging
       window.toolManager = toolManager;
       window.mcpManager = mcpManager;
       window.uiManager = uiManager;
+      window.mcpUI = mcpUI; // Also expose the McpUI instance
       window.debugHelpers = debugHelpers;
 
       // Start MCP polling
@@ -119,12 +122,16 @@
       window.setMcpServerStatus = (id, enabled) => mcpManager.setServerStatus(id, enabled);
       window.getMcpServers = () => mcpManager.getServers();
       window.fetchMcpToolDefinitions = () => mcpManager.fetchToolDefinitions();
+      
+      // Helper for manual UI testing
+      window.openMcpConfig = () => mcpManager.showServerConfigUI();
 
       // Send startup message
       sendMessage('MONITOR_STARTED', { version: '1.0.0' });
 
       console.log('📡 DEBUG Monitor active - Source Modules Loaded');
       console.log('📡 Debug helpers available - Try window.debugHelpers.listRegisteredTools()');
+      console.log('📡 You can open the MCP config with window.openMcpConfig()');
     } catch (error) {
       console.error('📡 Error initializing monitor:', error);
     }
