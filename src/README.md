@@ -27,7 +27,7 @@ The code uses webpack to bundle these modules together into the main `monitor.js
 The extension includes two ways to load the code:
 
 1. **Production Mode**: Uses the bundled `monitor.js` file
-2. **Development Mode**: Uses the `debug-monitor.js` which loads source files directly
+2. **Development Mode**: Uses the `monitor-debug.js` which loads source files directly
 
 To enable debugging with direct source access:
 
@@ -39,7 +39,7 @@ To enable debugging with direct source access:
 
 ### Debug Architecture
 
-- `debug-monitor.js` dynamically loads each module from source
+- `monitor-debug.js` dynamically loads each module from source
 - Each module exposes itself to the window when loaded directly
 - Changes to source files are immediately reflected on page refresh
 - Set breakpoints directly in the original source code

@@ -49,3 +49,5 @@ __pycache__/
 *.pyd
 *.pyw
 *.pyz
+
+generated/

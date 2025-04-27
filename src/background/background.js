@@ -1,7 +1,7 @@
 // background.js - MCP API handler
 
 // Import the MCP browser client
-import '../mcp-browser.js';
+import './generated/mcp-browser.js';
 
 // Store active MCP clients
 const mcpClients = new Map();

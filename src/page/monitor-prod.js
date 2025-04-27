@@ -2,11 +2,13 @@
   console.log('📡 MONITOR SCRIPT LOADED');
 
   // Import modules
-  const { sendMessage } = require('./modules/utils');
-  const ToolManager = require('./modules/ToolManager');
-  const McpManager = require('./modules/McpManager');
-  const UIManager = require('./modules/UIManager');
-  const McpUI = require('./modules/McpUI');
+  const { sendMessage } = require('./page-client');
+  const { BrowserMcpClient, runDemo } = require('./page-client');
+  const { sendMessage } = require('./utils');
+  const ToolManager = require('./ToolManager');
+  const McpManager = require('./McpManager');
+  const UIManager = require('./UIManager');
+  const McpUI = require('./McpUI');
   // ==============================
   // Main Initialization
   // ==============================

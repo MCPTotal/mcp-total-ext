@@ -23,9 +23,9 @@
 
     try {
       if (!isProduction) {
-        // Development mode - use debug-monitor.js
-        script.src = chrome.runtime.getURL('debug-monitor.js');
-        console.log('🔍 Development mode detected, using debug-monitor.js');
+        // Development mode - use monitor-debug.js
+        script.src = chrome.runtime.getURL('src/page/monitor-debug.js');
+        console.log('🔍 Development mode detected, using monitor-debug.js');
       } else {
         // Production mode - use bundled monitor.js
         script.src = chrome.runtime.getURL('monitor.js');

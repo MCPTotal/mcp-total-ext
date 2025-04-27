@@ -6,7 +6,7 @@ module.exports = {
   entry: './browser-mcp-client.js',
   output: {
     filename: 'mcp-browser.js',
-    path: path.resolve(__dirname, '../src/generated'),
+    path: path.resolve(__dirname, '../src/background/generated'),
     library: {
       name: 'MCPClient',
       type: 'umd',

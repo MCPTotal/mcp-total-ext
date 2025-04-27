@@ -47,20 +47,20 @@
   async function init() {
     try {
       // First load the module loader utility
-      await importModule('src/modules/module-loader.js');
+      await importModule('src/page/module-loader.js');
 
-      const {BrowserMcpClient, runDemo} = await importModule('src/page-client.js');
+      const {BrowserMcpClient, runDemo} = await importModule('src/page/page-client.js');
       await runDemo();
 
 
 
       // Then load all other modules in the correct dependency order
-      const utils = await importModule('src/modules/utils.js');
-      const UIManager = await importModule('src/modules/UIManager.js');
-      const ToolManager = await importModule('src/modules/ToolManager.js');
-      const McpUI = await importModule('src/modules/McpUI.js');
-      const McpManager = await importModule('src/modules/McpManager.js');
-      const debugHelpers = await importModule('src/modules/debug-helpers.js');
+      const utils = await importModule('src/page/utils.js');
+      const UIManager = await importModule('src/page/UIManager.js');
+      const ToolManager = await importModule('src/page/ToolManager.js');
+      const McpUI = await importModule('src/page/McpUI.js');
+      const McpManager = await importModule('src/page/McpManager.js');
+      const debugHelpers = await importModule('src/page/debug-helpers.js');
 
       // Extract utility functions
       const { sendMessage } = utils;

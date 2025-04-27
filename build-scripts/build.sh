@@ -3,7 +3,7 @@ set -e
 
 # Create directory structure
 echo "Creating directory structure..."
-mkdir -p dist
+mkdir -p ./src/background/generated
 
 # Install dependencies
 echo "Installing dependencies..."
