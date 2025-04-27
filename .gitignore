@@ -41,3 +41,11 @@ logs
 coverage/
 .nyc_output/
 extension-updated
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
