@@ -3,6 +3,10 @@
   "description": "Inject MCP tool definitions and handle tool calls when using ChatGPT in the browser.",
   "version": "0.1.0",
   "manifest_version": 3,
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -10,7 +14,8 @@
         "https://chatgpt.com/*"
       ],
       "js": [
-        "content.js"
+        "content.js",
+        "src/content/mcp-bridge.js"
       ],
       "run_at": "document_start"
     }

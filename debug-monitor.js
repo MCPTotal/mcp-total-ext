@@ -49,6 +49,11 @@
       // First load the module loader utility
       await importModule('src/modules/module-loader.js');
 
+      const {BrowserMcpClient, runDemo} = await importModule('src/page-client.js');
+      await runDemo();
+
+
+
       // Then load all other modules in the correct dependency order
       const utils = await importModule('src/modules/utils.js');
       const UIManager = await importModule('src/modules/UIManager.js');
