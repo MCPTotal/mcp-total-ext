@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "manifest_version": 3,
   "background": {
-    "service_worker": "src/background.js",
+    "service_worker": "src/background/background.js",
     "type": "module"
   },
   "content_scripts": [
@@ -14,7 +14,7 @@
         "https://chatgpt.com/*"
       ],
       "js": [
-        "content.js",
+        "src/content/content.js",
         "src/content/mcp-bridge.js"
       ],
       "run_at": "document_start"
@@ -37,7 +37,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["monitor.js", "debug-monitor.js", "src/*"],
+      "resources": ["src/page/*"],
       "matches": ["https://chat.openai.com/*", "https://chatgpt.com/*"]
     }
   ]
