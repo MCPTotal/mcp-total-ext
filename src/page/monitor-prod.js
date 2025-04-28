@@ -5,10 +5,10 @@
   const { sendMessage } = require('./page-client');
   const { BrowserMcpClient, runDemo } = require('./page-client');
   const { sendMessage } = require('./utils');
-  const ToolManager = require('./ToolManager');
-  const McpManager = require('./McpManager');
-  const UIManager = require('./UIManager');
-  const McpUI = require('./McpUI');
+  const ToolManager = require('./tool-manager');
+  const McpManager = require('./mcp-manager');
+  const UIManager = require('./ui-manager');
+  const McpUI = require('./mcp-ui');
   // ==============================
   // Main Initialization
   // ==============================

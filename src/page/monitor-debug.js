@@ -56,10 +56,10 @@
 
       // Then load all other modules in the correct dependency order
       const utils = await importModule('src/page/utils.js');
-      const UIManager = await importModule('src/page/UIManager.js');
-      const ToolManager = await importModule('src/page/ToolManager.js');
-      const McpUI = await importModule('src/page/McpUI.js');
-      const McpManager = await importModule('src/page/McpManager.js');
+      const UIManager = await importModule('src/page/ui-manager.js');
+      const ToolManager = await importModule('src/page/tool-manager.js');
+      const McpUI = await importModule('src/page/mcp-ui.js');
+      const McpManager = await importModule('src/page/mcp-manager.js');
       const debugHelpers = await importModule('src/page/debug-helpers.js');
 
       // Extract utility functions
