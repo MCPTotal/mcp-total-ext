@@ -6,7 +6,6 @@ class ToolManager {
     this.uiManager = uiManager;
     this.state = {
       authToken: null,
-      toolsConfigured: false,
       lastConversationId: null,
       lastToolCall: null,
       extractedParameters: {},
@@ -19,32 +18,12 @@ class ToolManager {
     this.TOOL_SECTION_START = '<!-- CHATGPT-TOOLS-START -->';
     this.TOOL_SECTION_END = '<!-- CHATGPT-TOOLS-END -->';
 
-    // Initialize with built-in tools
-    this.registerBuiltInTools();
 
     // Setup network interceptors
     this.setupNetworkInterceptors();
   }
 
-  registerBuiltInTools() {
-    this.registerTool('getCurrentTime', 'Get the current date and time', {}, () =>
-      new Date().toISOString()
-    );
-
-    this.registerTool(
-      'getWeather',
-      'Get current weather for a location',
-      {
-        location: {
-          type: 'string',
-          description: "City name, e.g. 'San Francisco, CA'",
-        },
-      },
-      params => `Weather data for ${params.location}: Sunny, 72°F`
-    );
-  }
-
-  registerTool(name, description, parameters, callback) {
+  registerTool(name, description, parameters, callback, shouldUpdateSystemSettings = true) {
     // Check if tool already exists
     const existingIndex = this.toolDefinitions.findIndex(tool => tool.name === name);
 
@@ -65,23 +44,28 @@ class ToolManager {
 
     console.log(`📡 Registered tool: ${name}`);
 
-    // If tools were already configured, update system settings
-    if (this.state.toolsConfigured && this.state.authToken) {
+    if (shouldUpdateSystemSettings) {
       this.updateSystemSettingsWithTools();
     }
 
     return toolDefinition;
   }
+  
+  registerTools(tools) {
+    for (const tool of tools) {
+      this.registerTool(tool.name, tool.description, tool.parameters, tool.callback, false);
+    }
+    this.updateSystemSettingsWithTools();
+  }
 
-  unregisterTool(name) {
+  unregisterTool(name, shouldUpdateSystemSettings = true) {
     const initialLength = this.toolDefinitions.length;
     this.toolDefinitions = this.toolDefinitions.filter(tool => tool.name !== name);
 
     if (this.toolDefinitions.length < initialLength) {
       console.log(`📡 Unregistered tool: ${name}`);
 
-      // If tools were already configured, update system settings
-      if (this.state.toolsConfigured && this.state.authToken) {
+      if (shouldUpdateSystemSettings) {
         this.updateSystemSettingsWithTools();
       }
       return true;
@@ -114,7 +98,7 @@ class ToolManager {
     return `Error: Unknown tool '${toolName}'`;
   }
 
-  getToolInstructions() {
+  getToolsInstructions() {
     return `${this.TOOL_SECTION_START}
 
 I have access to several tools that can help you answer my queries:
@@ -124,7 +108,7 @@ ${this.toolDefinitions
       let params = '';
       if (tool.parameters && Object.keys(tool.parameters).length > 0) {
         params = Object.entries(tool.parameters)
-          .map(([name, param]) => `- ${name}: ${param.description}`)
+          .map(([name, param]) => `\t* ${name}: ${param.description}`)
           .join('\n');
         params = `\nParameters:\n${params}`;
       }
@@ -301,7 +285,7 @@ ${this.TOOL_SECTION_END}`;
             return toolCalls.map(toolCall => {
               // Add the bound callback to each tool call
               toolCall.execute = params =>
-                boundExecuteToolCall(toolCall.tool, params || toolCall.parameters);
+                boundExecuteToolCall(toolCall.tool, toolCall.parameters);
               return toolCall;
             });
           }
@@ -626,11 +610,16 @@ ${this.TOOL_SECTION_END}`;
   }
 
   async updateSystemSettingsWithTools() {
+    if (!this.state.authToken) {
+      console.log('📡 No auth token available yet');
+      return null;
+    }
+
     // Get current system settings
     const currentSettings = await this.getCurrentSystemSettings();
     if (!currentSettings) return false;
 
-    const toolInstructions = this.getToolInstructions();
+    const toolInstructions = this.getToolsInstructions();
 
     try {
       // Create a copy of the current settings
@@ -701,7 +690,6 @@ ${this.TOOL_SECTION_END}`;
         console.log('📡 No changes to system settings needed');
       }
 
-      this.state.toolsConfigured = true;
       return true;
     } catch (error) {
       console.error('📡 Error updating system settings:', error);

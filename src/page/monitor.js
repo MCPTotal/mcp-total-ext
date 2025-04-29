@@ -145,6 +145,7 @@
       ToolManager,
       McpUI,
       McpManager,
+      PageMcpClient,
       runDemo,
       sendApiMonitorMessage
     } = modules;
@@ -153,7 +154,7 @@
     const uiManager = new UIManager();
     const toolManager = new ToolManager(uiManager);
     const mcpUI = new McpUI();
-    const mcpManager = new McpManager(toolManager, mcpUI);
+    const mcpManager = new McpManager(toolManager, mcpUI, PageMcpClient);
 
     // In debug mode, expose instances for console debugging
     if (!isProduction) {
@@ -212,14 +213,14 @@
     window.openMcpConfig = () => mcpManager.showServerConfigUI();
 
     // Run demo function to test MCP connection
-    await runDemo();
+    //await runDemo();
 
     // MCP server management API
     window.addMcpServer = config => mcpManager.addServer(config);
     window.removeMcpServer = id => mcpManager.removeServer(id);
     window.setMcpServerStatus = (id, enabled) => mcpManager.setServerStatus(id, enabled);
     window.getMcpServers = () => mcpManager.getServers();
-    window.fetchMcpToolDefinitions = () => mcpManager.fetchToolDefinitions();
+    window.fetchMcpToolDefinitions = () => mcpManager.fetchToolsDefinitions();
 
     // Debug mode toggle
     window.setDebugMode = (enabled) => {

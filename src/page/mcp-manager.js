@@ -2,12 +2,12 @@
 // McpManager Class
 // ==============================
 class McpManager {
-  constructor(toolManager, mcpUI) {
+  constructor(toolManager, mcpUI, pageMcpClient) {
     this.toolManager = toolManager;
     this.servers = [
       {
-        id: 'default',
-        url: 'https://api.mcp.example.com',
+        id: 'local server',
+        url: 'http://localhost:8020/sse',
         apiKey: '', // Will be populated dynamically or from user input
         enabled: true,
       },
@@ -29,6 +29,31 @@ class McpManager {
     } else {
       console.error('📡 McpManager: No UI manager provided');
     }
+
+    this.builtInTools = this.GetBuiltInTools();
+    this.pageMcpClient = pageMcpClient;
+  }
+
+  GetBuiltInTools() {
+    const builtInTools = [];
+    builtInTools.push({
+      name: 'getCurrentTime',
+      description: 'Get the current date and time',
+      parameters: {},
+      callback: () => new Date().toISOString(),
+    });
+    builtInTools.push({
+      name: 'getWeather',
+      description: 'Get current weather for a location',
+      parameters: {
+        location: {
+          type: 'string',
+          description: "City name, e.g. 'San Francisco, CA'",
+        },
+      },
+      callback: params => `Weather data for ${params.location}: Sunny, 72°F`,
+    });
+    return builtInTools;
   }
 
   addServer(serverConfig) {
@@ -51,7 +76,7 @@ class McpManager {
     }
 
     // Refresh tool definitions
-    this.fetchToolDefinitions();
+    this.fetchToolsDefinitions();
 
     return this.servers;
   }
@@ -61,7 +86,7 @@ class McpManager {
     if (index >= 0) {
       this.servers.splice(index, 1);
       console.log(`📡 Removed MCP server ${serverId}`);
-      this.fetchToolDefinitions(); // Refresh tool definitions
+      this.fetchToolsDefinitions(); // Refresh tool definitions
     }
     return this.servers;
   }
@@ -71,7 +96,7 @@ class McpManager {
     if (server) {
       server.enabled = !!enabled;
       console.log(`📡 Set MCP server ${serverId} status to ${enabled ? 'enabled' : 'disabled'}`);
-      this.fetchToolDefinitions(); // Refresh tool definitions
+      this.fetchToolsDefinitions(); // Refresh tool definitions
     }
     return this.servers;
   }
@@ -99,23 +124,14 @@ class McpManager {
    */
   async testServerConnection(server) {
     try {
-      const url = new URL('/status', server.url).href;
-      
-      const headers = {};
-      if (server.apiKey) {
-        headers['Authorization'] = `Bearer ${server.apiKey}`;
-      }
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Server returned status ${response.status}`);
-      }
-      
+
+      const client = new this.pageMcpClient(server.url);
+      await client.connect();
+      const tools = await client.listTools();
+      console.log('🔍 Available tools:', tools);
+      await client.disconnect();
       return true;
+
     } catch (error) {
       console.error(`📡 Connection test failed for ${server.id}:`, error);
       throw new Error(`Connection failed: ${error.message}`);
@@ -123,24 +139,23 @@ class McpManager {
   }
 
   startPolling() {
-    this.fetchToolDefinitions();
-    setInterval(() => this.fetchToolDefinitions(), this.pollingInterval);
+    this.fetchToolsDefinitions();
+    setInterval(() => this.fetchToolsDefinitions(), this.pollingInterval);
   }
 
-  async fetchToolDefinitions() {
+  async fetchToolsDefinitions() {
     // Prevent concurrent fetches
     if (this.activeFetch) return;
+    this.activeFetch = true;
 
     const now = Date.now();
     // Don't fetch too frequently
-    if (now - this.lastFetchTime < 10000 && this.toolManager.toolDefinitions.length > 2) {
+    if (now - this.lastFetchTime < 2000) {
       console.log(
         `📡 Skipping MCP tool fetch, last fetch was ${(now - this.lastFetchTime) / 1000}s ago`
       );
       return;
     }
-
-    this.activeFetch = true;
 
     try {
       console.log('📡 Fetching MCP tool definitions...');
@@ -152,13 +167,7 @@ class McpManager {
         return;
       }
 
-      // Keep the built-in tools (those that don't start with 'mcp_')
-      const builtInTools = this.toolManager.toolDefinitions.filter(
-        tool => !tool.name.startsWith('mcp')
-      );
-
-      // Remove all existing MCP tools
-      this.toolManager.toolDefinitions = [...builtInTools];
+      var tools = [...this.builtInTools];
 
       // Add MCP tools for each enabled server
       for (const server of enabledServers) {
@@ -168,43 +177,40 @@ class McpManager {
           let toolDefinitions = [];
           
           // Try to fetch real tool definitions from the server
-          if (server.url && server.url !== 'https://api.mcp.example.com') {
             try {
               toolDefinitions = await this.fetchToolsFromServer(server);
               console.log(`📡 Successfully fetched ${toolDefinitions.length} tools from ${server.id}`);
             } catch (error) {
               console.error(`📡 Error fetching tools from server ${server.id}:`, error);
             }
-          } else {
-            // Use mock tools for demo server
-            toolDefinitions = this.generateMockToolsForServer(server);
-          }
+
 
           // Process and add each tool with the server prefix
           toolDefinitions.forEach(tool => {
             // Create a standardized tool definition
             const mcpToolName = `mcp_${server.id}_${tool.name}`;
-            const description = `[${server.id}] ${tool.description}`;
+            const description = `${tool.description}`;
             const parameters = tool.parameters || {};
 
             // Create callback for this tool
             const callback = params => this.executeMcpTool(mcpToolName, params);
 
             // Register the tool
-            this.toolManager.registerTool(mcpToolName, description, parameters, callback);
+            tools.push({
+              name: mcpToolName,
+              description,
+              parameters,
+              callback
+            });
           });
+
+          this.toolManager.registerTools(tools);
 
           console.log(`📡 Added ${toolDefinitions.length} tools for MCP server ${server.id}`);
         } catch (error) {
           console.error(`📡 Error processing tools from MCP server ${server.id}:`, error);
         }
       }
-
-      // Update system message with new tool definitions if we have auth
-      if (this.toolManager.state.authToken) {
-        this.toolManager.updateSystemSettingsWithTools();
-      }
-
       // Update last fetch time
       this.lastFetchTime = Date.now();
     } catch (error) {
@@ -215,106 +221,75 @@ class McpManager {
   }
   
   /**
-   * Fetch tool definitions from a real MCP server
-   * @param {Object} server - Server configuration object
-   * @returns {Promise<Array>} - Array of tool definitions
+   * Converts tool input schema properties to the expected parameter format
+   * @param {Object} inputSchema - The input schema from the tool definition
+   * @returns {Object} - Formatted parameters object
    */
-  async fetchToolsFromServer(server) {
-    try {
-      const url = new URL('/tools', server.url).href;
-      
-      const headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+  convertToolParameters(inputSchema) {
+    if (!inputSchema || !inputSchema.properties) {
+      return {};
+    }
+    
+    const result = {};
+    
+    // Process each property in the input schema
+    Object.entries(inputSchema.properties).forEach(([paramName, paramSchema]) => {
+      result[paramName] = {
+        type: paramSchema.type || 'string',
+        description: (paramSchema.description || paramSchema.title || paramName).replace(/[\n\r]+/g, ' ').trim(),
       };
       
-      // Add API key to headers if available
-      if (server.apiKey) {
-        headers['Authorization'] = `Bearer ${server.apiKey}`;
+      // Add enum values if present
+      if (paramSchema.enum) {
+        result[paramName].enum = paramSchema.enum;
       }
+    });
+    
+    return result;
+  }
+
+  async fetchToolsFromServer(server) {
+    try {
+      const client = new this.pageMcpClient(server.url);
+      await client.connect();
+      var tools = await client.listTools();
+      await client.disconnect();
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      
-      // Process the response based on MCP standard format
-      // Expecting: { tools: [...] } or directly an array of tools
-      const tools = Array.isArray(data) ? data : (data.tools || []);
       
       return tools.map(tool => ({
-        name: tool.name || tool.function_name || tool.id,
-        description: tool.description || tool.summary || '',
-        parameters: tool.parameters || tool.schema || {}
+        name: tool.name,
+        description: (tool.description || '').replace(/[\n\r]+/g, ' ').trim(),
+        parameters: this.convertToolParameters(tool.inputSchema)
+        /*
+     {
+        "name": "greet",
+        "description": "\n    Greet a person by name\n    ",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "title": "greetArguments"
+        }
+      }
+
+      each param should be a key in the parameters object
+       location: {
+          type: 'string',
+          description: "City name, e.g. 'San Francisco, CA'",
+        },
+        */
       }));
     } catch (error) {
       console.error(`📡 Error fetching tools from ${server.url}:`, error);
       throw error;
     }
-  }
-
-  generateMockToolsForServer(server) {
-    // Additional tools based on server type or ID
-    let serverSpecificTools = [];
-
-    // Add specialized tools based on server ID or other properties
-    if (server.id.includes('api') || server.url.includes('api')) {
-      serverSpecificTools = [
-        ...serverSpecificTools,
-        {
-          name: 'listEndpoints',
-          description: 'List all available API endpoints',
-          parameters: {
-            filter: {
-              type: 'string',
-              description: 'Optional filter for endpoints',
-              required: false,
-            },
-          },
-        },
-      ];
-    }
-
-    // For default server, add a generic set of tools
-    if (server.id === 'default') {
-      serverSpecificTools = [
-        ...serverSpecificTools,
-        {
-          name: 'getSystemInfo',
-          description: 'Get system information',
-          parameters: {},
-        },
-        {
-          name: 'runCommand',
-          description: 'Run a system command',
-          parameters: {
-            command: {
-              type: 'string',
-              description: 'Command to execute',
-            },
-          },
-        },
-        {
-          name: 'getMetrics',
-          description: 'Get system metrics',
-          parameters: {
-            metric: {
-              type: 'string',
-              description: 'Metric to retrieve (cpu, memory, disk)',
-              enum: ['cpu', 'memory', 'disk', 'all'],
-            },
-          },
-        },
-      ];
-    }
-
-    return [...serverSpecificTools];
   }
 
   async executeMcpTool(toolName, parameters) {
@@ -344,17 +319,12 @@ class McpManager {
     );
 
     // Check if this is a real server or a demo server
-    if (server.url && server.url !== 'https://api.mcp.example.com') {
-      try {
-        // Call the real MCP server
-        return await this.executeToolOnServer(server, mcpToolName, parameters);
-      } catch (error) {
-        console.error(`📡 Error executing tool on server ${serverId}:`, error);
-        return `Error executing tool on server ${serverId}: ${error.message}`;
-      }
-    } else {
-      // Use mock implementation for demo servers
-      return this.generateMockToolResult(serverId, mcpToolName, parameters);
+    try {
+      // Call the real MCP server
+      return await this.executeToolOnServer(server, mcpToolName, parameters);
+    } catch (error) {
+      console.error(`📡 Error executing tool on server ${serverId}:`, error);
+      return `Error executing tool on server ${serverId}: ${error.message}`;
     }
   }
   
@@ -367,138 +337,19 @@ class McpManager {
    */
   async executeToolOnServer(server, toolName, parameters) {
     try {
-      const url = new URL(`/tools/${encodeURIComponent(toolName)}/execute`, server.url).href;
+      const client = new this.pageMcpClient(server.url);
+      await client.connect();
+      const result = await client.callTool(toolName, parameters);
+      await client.disconnect();
+      return result;
       
-      const headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
-      
-      // Add API key to headers if available
-      if (server.apiKey) {
-        headers['Authorization'] = `Bearer ${server.apiKey}`;
-      }
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ parameters })
-      });
-      
-      if (!response.ok) {
-        let errorText = `HTTP Error ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorText = errorData.error || errorData.message || errorText;
-        } catch (e) {
-          // If we can't parse the error as JSON, try to get text
-          errorText = await response.text() || errorText;
-        }
-        throw new Error(errorText);
-      }
-      
-      // Try to parse the response as JSON
-      const data = await response.json();
-      
-      // Handle different response formats:
-      // 1. { result: "text result" }
-      // 2. { output: "text result" }
-      // 3. Just a string
-      // 4. Any other object -> stringify it nicely
-      
-      if (typeof data === 'string') {
-        return data;
-      } else if (data.result !== undefined) {
-        return data.result;
-      } else if (data.output !== undefined) {
-        return data.output;
-      } else {
-        // Format the entire object as a readable string
-        return JSON.stringify(data, null, 2);
-      }
     } catch (error) {
       console.error(`📡 Error executing tool on ${server.url}:`, error);
       throw error;
     }
   }
 
-  generateMockToolResult(serverId, toolName, parameters) {
-    // Common mock responses
-    if (toolName === 'status') {
-      return `Server ${serverId} Status:\n- Status: Running\n- Uptime: 7 days, 4 hours\n- CPU Usage: 24%\n- Memory Usage: 1.2GB/4GB`;
-    }
-
-    if (toolName === 'info') {
-      return `Server ${serverId} Information:\n- Version: MCP v3.2.1\n- Hostname: mcp-${serverId}-node\n- Environment: Production\n- Region: us-west`;
-    }
-
-    // Database related mock responses
-    if (toolName === 'query') {
-      const query = parameters.query || 'SELECT 1';
-      const limit = parameters.limit || 10;
-      return `Executed query on ${serverId}:\n"${query}"\n\nResult (limited to ${limit} rows):\n| id | name | value |\n|----|------|-------|\n| 1 | item1 | 100 |\n| 2 | item2 | 250 |`;
-    }
-
-    if (toolName === 'listTables') {
-      const schema = parameters.schema || 'public';
-      return `Tables in schema '${schema}' on ${serverId}:\n- users\n- products\n- orders\n- transactions`;
-    }
-
-    // File system related mock responses
-    if (toolName === 'listFiles') {
-      const path = parameters.path || '/';
-      return `Files in '${path}' on ${serverId}:\n- config.json\n- data.db\n- logs/\n- scripts/`;
-    }
-
-    if (toolName === 'readFile') {
-      const path = parameters.path || '/unknown';
-      if (path.includes('config')) {
-        return `Contents of ${path}:\n\n{\n  "version": "1.0",\n  "environment": "production",\n  "logLevel": "info"\n}`;
-      } else {
-        return `Contents of ${path}:\n\nThis is a sample file content from server ${serverId}.`;
-      }
-    }
-
-    // API related mock responses
-    if (toolName === 'listEndpoints') {
-      const filter = parameters.filter || '';
-      return `Available endpoints on ${serverId}${filter ? ` (filtered by '${filter}')` : ''}:\n- GET /api/users\n- POST /api/users\n- GET /api/products\n- GET /api/metrics`;
-    }
-
-    if (toolName === 'executeRequest') {
-      const endpoint = parameters.endpoint || '/api/unknown';
-      const method = parameters.method || 'GET';
-      return `Executed ${method} request to ${endpoint} on ${serverId}:\n\nResponse:\n{\n  "status": "success",\n  "data": {\n    "id": 123,\n    "name": "Sample item"\n  }\n}`;
-    }
-
-    // System related mock responses
-    if (toolName === 'getSystemInfo') {
-      return `System information for ${serverId}:\n- OS: Linux 5.10.0\n- CPU: Intel Xeon @ 2.4GHz (8 cores)\n- Memory: 32GB\n- Disk: 500GB SSD (72% free)`;
-    }
-
-    if (toolName === 'runCommand') {
-      const command = parameters.command || 'help';
-      return `Executed command '${command}' on ${serverId}:\n\nOutput:\nCommand completed successfully with exit code 0`;
-    }
-
-    if (toolName === 'getMetrics') {
-      const metric = parameters.metric || 'all';
-      if (metric === 'cpu') {
-        return `CPU metrics for ${serverId}:\n- Usage: ${Math.floor(Math.random() * 100)}%\n- Load (1/5/15 min): ${Math.floor(Math.random() * 10) / 10}.${Math.floor(Math.random() * 10)}/${Math.floor(Math.random() * 10) / 10}.${Math.floor(Math.random() * 10)}\n- Processes: ${Math.floor(Math.random() * 1000)}`;
-      } else if (metric === 'memory') {
-        return `Memory metrics for ${serverId}:\n- Total: 32GB\n- Used: 12.8GB (40%)\n- Free: 19.2GB\n- Swap: 0.5GB/8GB`;
-      } else if (metric === 'disk') {
-        return `Disk metrics for ${serverId}:\n- Total: 500GB\n- Used: 140GB (28%)\n- Free: 360GB\n- I/O: 2.4MB/s read, 1.1MB/s write`;
-      } else {
-        return `System metrics for ${serverId}:\n- CPU: 24% usage\n- Memory: 12.8GB/32GB (40%)\n- Disk: 140GB/500GB (28%)\n- Network: 4.2Mbps in, 2.1Mbps out`;
-      }
-    }
-
-    // Generic fallback response
-    return `Executed ${toolName} on ${serverId} with parameters: ${JSON.stringify(parameters)}\n\nMock response generated for demonstration purposes.`;
-  }
-
-  showServerSelectionNotification() {
+    showServerSelectionNotification() {
     if (this.ui) {
       this.ui.showServerSelectionNotification();
     }
