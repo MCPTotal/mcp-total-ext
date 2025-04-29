@@ -15,6 +15,7 @@ class McpManager {
     this.pollingInterval = 60000; // How often to refresh tool definitions (in ms)
     this.lastFetchTime = 0;
     this.activeFetch = false;
+    this.STORAGE_KEY = 'mcp_servers';
     
     // Initialize the UI manager
     this.ui = mcpUI;
@@ -32,6 +33,81 @@ class McpManager {
 
     this.builtInTools = this.GetBuiltInTools();
     this.pageMcpClient = pageMcpClient;
+    
+    // Load saved servers from storage
+    this.loadServers();
+  }
+
+  /**
+   * Loads saved server configurations from Chrome storage
+   */
+  loadServers() {
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.sync.get(this.STORAGE_KEY, (result) => {
+        if (chrome.runtime.lastError) {
+          console.error('📡 Error loading servers:', chrome.runtime.lastError);
+          return;
+        }
+        
+        const savedServers = result[this.STORAGE_KEY];
+        if (savedServers && Array.isArray(savedServers) && savedServers.length > 0) {
+          console.log(`📡 Loaded ${savedServers.length} server(s) from storage`);
+          // Replace default servers with saved ones
+          this.servers = savedServers;
+          // Refresh tool definitions with loaded servers
+          this.fetchToolsDefinitions();
+        } else {
+          console.log('📡 No saved servers found, using defaults');
+          // Save default servers to storage
+          this.saveServers();
+        }
+      });
+    } else {
+      // Fallback to localStorage if Chrome storage is not available (development/testing)
+      try {
+        const savedServers = localStorage.getItem(this.STORAGE_KEY);
+        if (savedServers) {
+          const parsedServers = JSON.parse(savedServers);
+          if (Array.isArray(parsedServers) && parsedServers.length > 0) {
+            console.log(`📡 Loaded ${parsedServers.length} server(s) from localStorage`);
+            this.servers = parsedServers;
+            this.fetchToolsDefinitions();
+          }
+        } else {
+          console.log('📡 No saved servers found in localStorage, using defaults');
+          // Save default servers to localStorage
+          this.saveServers();
+        }
+      } catch (error) {
+        console.error('📡 Error loading servers from localStorage:', error);
+      }
+    }
+  }
+
+  /**
+   * Saves current server configurations to Chrome storage
+   */
+  saveServers() {
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      const data = {};
+      data[this.STORAGE_KEY] = this.servers;
+      
+      chrome.storage.sync.set(data, () => {
+        if (chrome.runtime.lastError) {
+          console.error('📡 Error saving servers:', chrome.runtime.lastError);
+          return;
+        }
+        console.log(`📡 Saved ${this.servers.length} server(s) to storage`);
+      });
+    } else {
+      // Fallback to localStorage if Chrome storage is not available
+      try {
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.servers));
+        console.log(`📡 Saved ${this.servers.length} server(s) to localStorage`);
+      } catch (error) {
+        console.error('📡 Error saving servers to localStorage:', error);
+      }
+    }
   }
 
   GetBuiltInTools() {
@@ -75,6 +151,9 @@ class McpManager {
       console.log(`📡 Added new MCP server ${serverConfig.id}`);
     }
 
+    // Save changes to storage
+    this.saveServers();
+
     // Refresh tool definitions
     this.fetchToolsDefinitions();
 
@@ -86,6 +165,10 @@ class McpManager {
     if (index >= 0) {
       this.servers.splice(index, 1);
       console.log(`📡 Removed MCP server ${serverId}`);
+      
+      // Save changes to storage
+      this.saveServers();
+      
       this.fetchToolsDefinitions(); // Refresh tool definitions
     }
     return this.servers;
@@ -96,6 +179,10 @@ class McpManager {
     if (server) {
       server.enabled = !!enabled;
       console.log(`📡 Set MCP server ${serverId} status to ${enabled ? 'enabled' : 'disabled'}`);
+      
+      // Save changes to storage
+      this.saveServers();
+      
       this.fetchToolsDefinitions(); // Refresh tool definitions
     }
     return this.servers;
@@ -260,31 +347,6 @@ class McpManager {
         name: tool.name,
         description: (tool.description || '').replace(/[\n\r]+/g, ' ').trim(),
         parameters: this.convertToolParameters(tool.inputSchema)
-        /*
-     {
-        "name": "greet",
-        "description": "\n    Greet a person by name\n    ",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "title": "Name",
-              "type": "string"
-            }
-          },
-          "required": [
-            "name"
-          ],
-          "title": "greetArguments"
-        }
-      }
-
-      each param should be a key in the parameters object
-       location: {
-          type: 'string',
-          description: "City name, e.g. 'San Francisco, CA'",
-        },
-        */
       }));
     } catch (error) {
       console.error(`📡 Error fetching tools from ${server.url}:`, error);
@@ -349,7 +411,7 @@ class McpManager {
     }
   }
 
-    showServerSelectionNotification() {
+  showServerSelectionNotification() {
     if (this.ui) {
       this.ui.showServerSelectionNotification();
     }
