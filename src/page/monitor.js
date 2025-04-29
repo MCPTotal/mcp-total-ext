@@ -20,6 +20,19 @@
   if (!isProduction) {
     console.log('📡 Running in debug mode - will load modules dynamically');
     
+    window.exposeModule = function (moduleExport) {
+        // For CommonJS environments (webpack bundling)
+        if (typeof module !== 'undefined' && module.exports) {
+          module.exports = moduleExport;
+        }
+        // For direct browser usage in debug mode
+        // Get the script ID to expose this module with correct name
+        const currentScript = document.currentScript;
+        if (currentScript && currentScript.id) {
+          window[currentScript.id] = moduleExport;
+        }
+    }
+
     // Helper function to dynamically import a module
     async function importModule(modulePath) {
       // Create a unique script ID for this import
@@ -69,8 +82,6 @@
     // Initialize all modules in debug mode
     async function initDebugMode() {
       try {
-        await importModule('src/page/module-loader.js');
-  
         // Load all modules in the correct dependency order
         const utils = await importModule('src/page/utils.js');
         const { PageMcpClient, runDemo } = await importModule('src/page/page-client.js');
