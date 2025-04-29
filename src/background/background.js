@@ -1,7 +1,8 @@
 // background.js - MCP API handler
 
-// Import the MCP browser client
-import './generated/mcp-browser.js';
+// Import the MCP browser client 
+import * as MCPClientModule from '../mcpClient/mcp-browser-generated.js';
+const MCPClient = globalThis.MCPClient ||  MCPClientModule;
 
 // Store active MCP clients
 const mcpClients = new Map();

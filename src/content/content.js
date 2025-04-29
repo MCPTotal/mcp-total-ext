@@ -28,12 +28,12 @@
         console.log('🔍 Development mode detected, using monitor-debug.js');
       } else {
         // Production mode - use bundled monitor.js
-        script.src = chrome.runtime.getURL('monitor.js');
+        script.src = chrome.runtime.getURL('src/page/monitor.js');
         console.log('🔍 Production mode detected, using bundled monitor.js');
       }
     } catch (error) {
       // Fallback to production version
-      script.src = chrome.runtime.getURL('monitor.js');
+      script.src = chrome.runtime.getURL('src/page/monitor.js');
       console.log('🔍 Error detecting mode, falling back to bundled monitor.js');
     }
 

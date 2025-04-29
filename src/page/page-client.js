@@ -1,14 +1,29 @@
+/**
+ * MCP Page Client
+ * 
+ * This module provides a browser-friendly wrapper around the MCP client
+ * that runs in the page context and communicates with the extension background
+ * script through the content bridge.
+ */
+
+// Map to store pending requests
 const pendingRequests = new Map();
 
-// Generate unique request IDs
+/**
+ * Generate a unique request ID
+ * @returns {string} A unique request ID
+ */
 function generateRequestId() {
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
 }
 
-
-
-// Send message to background script via content script
-function sendMessage(action, params) {
+/**
+ * Send a message to the background script via content script
+ * @param {string} action The action to perform
+ * @param {object} params Parameters for the action
+ * @returns {Promise<any>} A promise that resolves with the result
+ */
+function sendMcpMessage(action, params) {
   return new Promise((resolve, reject) => {
     const requestId = generateRequestId();
     
@@ -55,23 +70,34 @@ window.addEventListener('message', (event) => {
   }
 });
 
-///////////////
-
-// Browser-friendly MCP client implementation
-class BrowserMcpClient {
+/**
+ * PageMcpClient
+ * 
+ * A client for interacting with MCP servers from the page context.
+ * Communicates with the background script through the content bridge.
+ */
+class PageMcpClient {
+  /**
+   * Create a new PageMcpClient
+   * @param {string} serverUrl URL of the MCP server
+   */
   constructor(serverUrl) {
     this.serverUrl = serverUrl;
     this.clientId = null;
     this.connected = false;
   }
   
+  /**
+   * Connect to the MCP server
+   * @returns {Promise<object>} Connection result
+   */
   async connect() {
     if (this.connected) {
       return;
     }
     
     try {
-      const result = await sendMessage('connect', { url: this.serverUrl });
+      const result = await sendMcpMessage('connect', { url: this.serverUrl });
       this.clientId = result.clientId;
       this.connected = true;
       return result;
@@ -80,13 +106,17 @@ class BrowserMcpClient {
     }
   }
   
+  /**
+   * Disconnect from the MCP server
+   * @returns {Promise<void>}
+   */
   async disconnect() {
     if (!this.connected || !this.clientId) {
       return;
     }
     
     try {
-      await sendMessage('disconnect', { clientId: this.clientId });
+      await sendMcpMessage('disconnect', { clientId: this.clientId });
       this.connected = false;
       this.clientId = null;
     } catch (error) {
@@ -94,32 +124,42 @@ class BrowserMcpClient {
     }
   }
   
+  /**
+   * List available tools from the MCP server
+   * @returns {Promise<Array>} List of available tools
+   */
   async listTools() {
     if (!this.connected || !this.clientId) {
       throw new Error('Not connected to MCP server');
     }
     
     try {
-      return await sendMessage('listTools', { clientId: this.clientId });
+      return await sendMcpMessage('listTools', { clientId: this.clientId });
     } catch (error) {
       throw new Error(`MCP list tools error: ${error.message}`);
     }
   }
   
-  async callTool(toolOptions) {
+  /**
+   * Call a tool on the MCP server
+   * @param {string|object} toolOptions Tool name or options object
+   * @param {object} [toolArguments] Tool arguments if first parameter is a string
+   * @returns {Promise<any>} Tool result
+   */
+  async callTool(toolOptions, toolArguments) {
     if (!this.connected || !this.clientId) {
       throw new Error('Not connected to MCP server');
     }
     
     // Support both toolName + arguments and object with name + arguments
-    let toolName, toolArguments;
+    let toolName, args;
     
     if (typeof toolOptions === 'string') {
       toolName = toolOptions;
-      toolArguments = arguments[1] || {};
+      args = toolArguments || {};
     } else {
       toolName = toolOptions.name;
-      toolArguments = toolOptions.arguments || {};
+      args = toolOptions.arguments || {};
     }
     
     if (!toolName) {
@@ -127,10 +167,10 @@ class BrowserMcpClient {
     }
     
     try {
-      return await sendMessage('callTool', {
+      return await sendMcpMessage('callTool', {
         clientId: this.clientId,
         toolName: toolName,
-        arguments: toolArguments
+        arguments: args
       });
     } catch (error) {
       throw new Error(`MCP tool call error: ${error.message}`);
@@ -138,13 +178,16 @@ class BrowserMcpClient {
   }
 }
 
-
+/**
+ * Run a simple demo to test MCP functionality
+ * @returns {Promise<object>} Demo result
+ */
 async function runDemo() {
   try {
     console.log('🚀 Starting MCP demo...');
     
     // Create client
-    const client = new BrowserMcpClient('http://localhost:8020/sse');
+    const client = new PageMcpClient('http://localhost:8020/sse');
     console.log('📡 Client created');
     
     // Connect
@@ -172,19 +215,20 @@ async function runDemo() {
   }
 }
 
-console.log('MCP browser client initialized');
-
+console.log('📡 MCP Page Client initialized');
 
 // Create the module exports
-const exporting = {
-  BrowserMcpClient,
+const moduleExports = {
+  PageMcpClient,
   runDemo
 };
 
+// Support different module systems
 if (typeof exposeModule === 'function') {
-  exposeModule(exporting);
+  exposeModule(moduleExports);
+} else if (typeof module !== 'undefined' && module.exports) {
+  module.exports = moduleExports;
 } else {
-  if (typeof module !== 'undefined' && module.exports) {
-    module.exports = exporting;
-  }
+  // Make available in window scope for direct browser usage
+  window.mcpPageClient = moduleExports;
 }

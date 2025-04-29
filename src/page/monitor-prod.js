@@ -1,10 +1,9 @@
-(function () {
+(async function () {
   console.log('📡 MONITOR SCRIPT LOADED');
 
   // Import modules
-  const { sendMessage } = require('./page-client');
-  const { BrowserMcpClient, runDemo } = require('./page-client');
-  const { sendMessage } = require('./utils');
+  const { PageMcpClient, runDemo } = require('./page-client');
+  const { sendApiMonitorMessage } = require('./utils');
   const ToolManager = require('./tool-manager');
   const McpManager = require('./mcp-manager');
   const UIManager = require('./ui-manager');
@@ -25,7 +24,7 @@
     if (event.source !== window) return;
 
     if (event.data && event.data.type === 'API_MONITOR_CHECK') {
-      sendMessage('LOADED', { timestamp: new Date().toISOString() });
+      sendApiMonitorMessage('LOADED', { timestamp: new Date().toISOString() });
     }
   });
 
@@ -62,6 +61,8 @@
     );
   };
 
+  await runDemo();
+
   window.addMcpServer = config => mcpManager.addServer(config);
   window.removeMcpServer = id => mcpManager.removeServer(id);
   window.setMcpServerStatus = (id, enabled) => mcpManager.setServerStatus(id, enabled);
@@ -69,7 +70,7 @@
   window.fetchMcpToolDefinitions = () => mcpManager.fetchToolDefinitions();
 
   // Send startup message
-  sendMessage('MONITOR_STARTED', { version: '1.0.0' });
+  sendApiMonitorMessage('MONITOR_STARTED', { version: '1.0.0' });
 
   console.log('📡 API Monitor active - Modular Architecture');
 })();

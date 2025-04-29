@@ -195,10 +195,12 @@ try {
 }
 
 
-export default {
+const MCPClient = {
   Client: BrowserMcpClient,
   // Also export the original classes for advanced usage
   OriginalClient: Client,
   SSEClientTransport,
   StreamableHTTPClientTransport
 }; 
+
+export default MCPClient;

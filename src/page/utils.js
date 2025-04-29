@@ -3,7 +3,7 @@
 // ==============================
 
 // Send a message back to the content script
-function sendMessage(action, data) {
+function sendApiMonitorMessage(action, data) {
   window.postMessage(
     {
       type: 'API_MONITOR',
@@ -16,7 +16,7 @@ function sendMessage(action, data) {
 
 // Create the module exports
 const utils = {
-  sendMessage,
+  sendApiMonitorMessage,
 };
 
 if (typeof exposeModule === 'function') {

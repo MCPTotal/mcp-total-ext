@@ -49,7 +49,7 @@
       // First load the module loader utility
       await importModule('src/page/module-loader.js');
 
-      const {BrowserMcpClient, runDemo} = await importModule('src/page/page-client.js');
+      const {PageMcpClient, runDemo} = await importModule('src/page/page-client.js');
       await runDemo();
 
 
@@ -60,10 +60,9 @@
       const ToolManager = await importModule('src/page/tool-manager.js');
       const McpUI = await importModule('src/page/mcp-ui.js');
       const McpManager = await importModule('src/page/mcp-manager.js');
-      const debugHelpers = await importModule('src/page/debug-helpers.js');
 
       // Extract utility functions
-      const { sendMessage } = utils;
+      const { sendApiMonitorMessage } = utils;
 
       // Initialize components
       const uiManager = new UIManager();
@@ -78,7 +77,6 @@
       window.mcpManager = mcpManager;
       window.uiManager = uiManager;
       window.mcpUI = mcpUI; // Also expose the McpUI instance
-      window.debugHelpers = debugHelpers;
 
       // Start MCP polling
       mcpManager.startPolling();
@@ -88,7 +86,7 @@
         if (event.source !== window) return;
 
         if (event.data && event.data.type === 'API_MONITOR_CHECK') {
-          sendMessage('LOADED', { timestamp: new Date().toISOString() });
+          sendApiMonitorMessage('LOADED', { timestamp: new Date().toISOString() });
         }
       });
 
@@ -132,10 +130,9 @@
       window.openMcpConfig = () => mcpManager.showServerConfigUI();
 
       // Send startup message
-      sendMessage('MONITOR_STARTED', { version: '1.0.0' });
+      sendApiMonitorMessage('MONITOR_STARTED', { version: '1.0.0' });
 
       console.log('📡 DEBUG Monitor active - Source Modules Loaded');
-      console.log('📡 Debug helpers available - Try window.debugHelpers.listRegisteredTools()');
       console.log('📡 You can open the MCP config with window.openMcpConfig()');
     } catch (error) {
       console.error('📡 Error initializing monitor:', error);
