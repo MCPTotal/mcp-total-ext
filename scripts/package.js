@@ -49,38 +49,24 @@ safelyAddFile(path.join(distDir, 'manifest.json'), 'manifest.json');
 
 // Add all built JavaScript files
 // - Background scripts
-safelyAddFile(path.join(distDir, 'background/background.js'), 'background/background.js');
+safelyAddFile(path.join(distDir, 'src/background/background.js'), 'src/background/background.js');
 
 // - Content scripts
-safelyAddFile(path.join(distDir, 'content/content.js'), 'content/content.js');
-safelyAddFile(path.join(distDir, 'content/mcp-bridge.js'), 'content/mcp-bridge.js');
+safelyAddFile(path.join(distDir, 'src/content/content.js'), 'src/content/content.js');
+safelyAddFile(path.join(distDir, 'src/content/mcp-bridge.js'), 'src/content/mcp-bridge.js');
 
 // - Page scripts (web accessible resources)
-safelyAddFile(path.join(distDir, 'page/monitor-debug.js'), 'page/monitor-debug.js');
-safelyAddFile(path.join(distDir, 'page/monitor-prod.js'), 'page/monitor-prod.js');
-safelyAddFile(path.join(distDir, 'page/tool-manager.js'), 'page/tool-manager.js');
-safelyAddFile(path.join(distDir, 'page/mcp-manager.js'), 'page/mcp-manager.js');
-safelyAddFile(path.join(distDir, 'page/ui-manager.js'), 'page/ui-manager.js');
-safelyAddFile(path.join(distDir, 'page/mcp-ui.js'), 'page/mcp-ui.js');
-safelyAddFile(path.join(distDir, 'page/utils.js'), 'page/utils.js');
-safelyAddFile(path.join(distDir, 'page/page-client.js'), 'page/page-client.js');
+safelyAddFile(path.join(distDir, 'src/page/monitor.js'), 'src/page/monitor.js');
 
-// Add MCP client
-safelyAddFile(path.join(distDir, 'mcpClient/mcp-browser.js'), 'mcpClient/mcp-browser.js');
 
 // Add assets (icons)
-const assetsDir = path.join(distDir, 'assets');
+const assetsDir = path.join(distDir, 'icons');
 if (fs.existsSync(assetsDir)) {
-  archive.directory(assetsDir, 'assets');
+  archive.directory(assetsDir, 'icons');
   console.log('Added: assets directory');
 } else {
   console.warn('Warning: assets directory not found, skipping');
 }
-
-// Add documentation files
-safelyAddFile('README.md', 'README.md');
-safelyAddFile('CHANGELOG.md', 'CHANGELOG.md');
-safelyAddFile('LICENSE', 'LICENSE');
 
 // Finalize the archive
 archive.finalize();
