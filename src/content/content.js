@@ -13,29 +13,9 @@
     // Create an external script file in extension
     const script = document.createElement('script');
 
-    // Check if we're in a production build - environment variable set by webpack
-    var isProduction = false;
-    try {
-      isProduction = process.env.IS_PRODUCTION;
-    } catch (error) {
-      console.log('🔍 Assuming development mode, error checking production mode:', error);
-    }
-
-    try {
-      if (!isProduction) {
-        // Development mode - use monitor-debug.js
-        script.src = chrome.runtime.getURL('src/page/monitor-debug.js');
-        console.log('🔍 Development mode detected, using monitor-debug.js');
-      } else {
-        // Production mode - use bundled monitor.js
-        script.src = chrome.runtime.getURL('src/page/monitor.js');
-        console.log('🔍 Production mode detected, using bundled monitor.js');
-      }
-    } catch (error) {
-      // Fallback to production version
-      script.src = chrome.runtime.getURL('src/page/monitor.js');
-      console.log('🔍 Error detecting mode, falling back to bundled monitor.js');
-    }
+    // Use the unified monitor script
+    script.src = chrome.runtime.getURL('src/page/monitor.js');
+    console.log('🔍 Using unified monitor script');
 
     // Get extension base URL
     const extensionUrl = chrome.runtime.getURL('');
