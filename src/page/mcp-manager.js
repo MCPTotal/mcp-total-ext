@@ -291,13 +291,13 @@ class McpManager {
             });
           });
 
-          this.toolManager.registerTools(tools);
 
           console.log(`📡 Added ${toolDefinitions.length} tools for MCP server ${server.id}`);
         } catch (error) {
           console.error(`📡 Error processing tools from MCP server ${server.id}:`, error);
         }
       }
+      this.toolManager.registerTools(tools);
       // Update last fetch time
       this.lastFetchTime = Date.now();
     } catch (error) {

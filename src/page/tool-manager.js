@@ -2,6 +2,35 @@
 // ToolManager Class
 // ==============================
 class ToolManager {
+  // Static properties
+  static CHAR_LIMIT = 1500; // Character limit per field for system messages
+  static TOOL_SECTION_START = '<!-- TSS -->';
+  static TOOL_SECTION_END = '<!-- TSE -->';
+  static SYSTEM_PROMPT = `
+  I have access to several tools (mentioned with "TOOL:" in the system prompt) that can help you answer my queries.
+When you need to use a tool, tell me, I'll run it and tell you the result.
+Always!!! respond in this exact format:
+[TOOL_CALL]
+{
+  "tool": "toolName",
+  "parameters": {
+    "param1": "value1"
+  }
+}
+[/TOOL_CALL]
+
+Note: You must! respond in this exact format.
+For example, to get the current time, respond with:
+[TOOL_CALL]
+{
+  "tool": "getCurrentTime",
+  "parameters": {}
+}
+[/TOOL_CALL]
+
+I will provide you with the result. Then continue the conversation.
+`
+
   constructor(uiManager) {
     this.uiManager = uiManager;
     this.state = {
@@ -15,8 +44,6 @@ class ToolManager {
     this.toolDefinitions = [];
 
     // Tool instruction for the system message with clear markers
-    this.TOOL_SECTION_START = '<!-- CHATGPT-TOOLS-START -->';
-    this.TOOL_SECTION_END = '<!-- CHATGPT-TOOLS-END -->';
 
 
     // Setup network interceptors
@@ -96,49 +123,6 @@ class ToolManager {
     }
 
     return `Error: Unknown tool '${toolName}'`;
-  }
-
-  getToolsInstructions() {
-    return `${this.TOOL_SECTION_START}
-
-I have access to several tools that can help you answer my queries:
-
-${this.toolDefinitions
-    .map(tool => {
-      let params = '';
-      if (tool.parameters && Object.keys(tool.parameters).length > 0) {
-        params = Object.entries(tool.parameters)
-          .map(([name, param]) => `\t* ${name}: ${param.description}`)
-          .join('\n');
-        params = `\nParameters:\n${params}`;
-      }
-      return `- ${tool.name}: ${tool.description}${params}`;
-    })
-    .join('\n\n')}
-
-When you need to use a tool, tell me, I'll run it and tell you the result.
-Always!!! respond in this exact format:
-[TOOL_CALL]
-{
-  "tool": "toolName",
-  "parameters": {
-    "param1": "value1"
-  }
-}
-[/TOOL_CALL]
-
-Note: You must! respond in this exact format.
-For example, to get the current time, respond with:
-[TOOL_CALL]
-{
-  "tool": "getCurrentTime",
-  "parameters": {}
-}
-[/TOOL_CALL]
-
-I will provide you with the result. Then continue the conversation.
-
-${this.TOOL_SECTION_END}`;
   }
 
   setupNetworkInterceptors() {
@@ -581,6 +565,21 @@ ${this.TOOL_SECTION_END}`;
     }
   }
 
+
+  getToolsDefinitions() {
+    return this.toolDefinitions.map(tool => {
+        let params = '';
+        if (tool.parameters && Object.keys(tool.parameters).length > 0) {
+          params = Object.entries(tool.parameters)
+            .map(([name, param]) => `\t* ${name}: ${param.description}`)
+            .join('\n');
+          params = `\nPARAMS:\n${params}`;
+        }
+        return `TOOL: ${tool.name}: ${tool.description}${params}`;
+      });
+  }
+
+
   async getCurrentSystemSettings() {
     if (!this.state.authToken) {
       console.log('📡 No auth token available yet');
@@ -609,6 +608,39 @@ ${this.TOOL_SECTION_END}`;
     }
   }
 
+/*
+
+{
+  "object": "user_system_message_detail",
+  "enabled": true,
+  "about_user_message": "Anything else ChatGPT should know about you?", // copy of other_user_message
+  "about_model_message": "aaaaa", // copy of traits_model_message
+  "name_user_message": "What should ChatGPT call you?",
+  "role_user_message": "What do you do2",
+  "traits_model_message": "aaaaa",
+  "other_user_message": "Anything else ChatGPT should know about you?",
+  "disabled_tools": [
+    "dalle"
+  ]
+}
+*/
+
+
+  replaceOrCreateSectionInString(string, sectionStart, sectionEnd, newSection) {
+    string = string || '';
+    const replacement = sectionStart + '\n' + newSection + '\n' + sectionEnd;
+    const regex = new RegExp(
+      `${sectionStart}([\\s\\S]*?)${sectionEnd}`,
+      'g'
+    );
+    const match = regex.exec(string);
+    if (match) {
+      return string.replace(match[0], replacement);
+    }
+    return string + '\n\n' + replacement;
+  }
+
+
   async updateSystemSettingsWithTools() {
     if (!this.state.authToken) {
       console.log('📡 No auth token available yet');
@@ -619,57 +651,61 @@ ${this.TOOL_SECTION_END}`;
     const currentSettings = await this.getCurrentSystemSettings();
     if (!currentSettings) return false;
 
-    const toolInstructions = this.getToolsInstructions();
+    // Get available fields we can use for tool descriptions
+    const availableFields = [
+      'traits_model_message',
+      'other_user_message',
+      'role_user_message',
+      'name_user_message'
+    ];
+    
+    const toolsDefinitions = this.getToolsDefinitions();
+    const completePrompt = [ToolManager.SYSTEM_PROMPT, ...toolsDefinitions];
+    // Create a copy of the current settings
+    const updatedSettings = { ...currentSettings };
 
     try {
-      // Create a copy of the current settings
-      const updatedSettings = { ...currentSettings };
-
-      // Update or set the traits message with our tool instructions
-      if (updatedSettings.traits_model_message) {
-        // Check if our section already exists
-        if (updatedSettings.traits_model_message.includes(this.TOOL_SECTION_START)) {
-          // Extract the existing section
-          const regex = new RegExp(
-            `${this.TOOL_SECTION_START}([\\s\\S]*?)${this.TOOL_SECTION_END}`,
-            'g'
+      let startIndex = 0;
+      let newStartIndex = 0;
+      for (const field of availableFields) {
+        let endIndex = startIndex + 1;
+        let newFieldContent = this.replaceOrCreateSectionInString(
+          currentSettings[field], 
+          ToolManager.TOOL_SECTION_START, 
+          ToolManager.TOOL_SECTION_END, 
+          completePrompt.slice(startIndex, endIndex).join('\n\n')
+        );
+        
+        while (newFieldContent.length < ToolManager.CHAR_LIMIT && endIndex < completePrompt.length) {
+          updatedSettings[field] = newFieldContent;
+          newStartIndex = endIndex;
+          endIndex++;
+          newFieldContent = this.replaceOrCreateSectionInString(
+            currentSettings[field], 
+            ToolManager.TOOL_SECTION_START, 
+            ToolManager.TOOL_SECTION_END, 
+            completePrompt.slice(startIndex, endIndex).join('\n\n')
           );
-          const match = regex.exec(updatedSettings.traits_model_message);
-
-          if (match) {
-            const existingSection = match[0];
-            const newSection = toolInstructions;
-
-            // Only update if the content has actually changed
-            if (existingSection === newSection) {
-              console.log('📡 Tool section already up to date, skipping update');
-              return true;
-            }
-
-            // Replace the existing section
-            updatedSettings.traits_model_message = updatedSettings.traits_model_message.replace(
-              regex,
-              toolInstructions
-            );
-            console.log('📡 Replaced existing tool section');
-          } else {
-            // Add our section at the end if regex match failed
-            updatedSettings.traits_model_message += '\n\n' + toolInstructions;
-            console.log('📡 Added new tool section (after failed match)');
-          }
-        } else {
-          // Add our section at the end
-          updatedSettings.traits_model_message += '\n\n' + toolInstructions;
-          console.log('📡 Added new tool section');
         }
-      } else {
-        // No existing message, just use our tools
-        updatedSettings.traits_model_message = toolInstructions;
-        console.log('📡 Created new traits message with tools');
+        
+        // Set the final content for this field
+        if (newFieldContent.length <= ToolManager.CHAR_LIMIT) {
+          updatedSettings[field] = newFieldContent;
+          newStartIndex = endIndex;
+        }
+        console.log(`📡 Setting ${field} with tool definitions (${updatedSettings[field].length} chars)`);
+        
+        // Break if we've used all tool definitions
+        if (newStartIndex >= completePrompt.length) {
+          break;
+        }
+        startIndex = newStartIndex;
       }
 
-      // Only make the API call if we actually changed something
-      if (updatedSettings.traits_model_message !== currentSettings.traits_model_message) {
+      // Compare the entire objects to detect changes
+      const hasChanges = JSON.stringify(updatedSettings) !== JSON.stringify(currentSettings);
+      
+      if (hasChanges) {
         // Send the updated settings
         console.log('📡 Updating system settings with tool definitions:', updatedSettings);
         const response = await fetch('https://chatgpt.com/backend-api/user_system_messages', {
