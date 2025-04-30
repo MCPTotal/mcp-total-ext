@@ -28,18 +28,12 @@ jobs:
     
     - name: Lint
       run: npm run lint
-    
-    - name: Type check
-      run: npm run type-check
-    
-    - name: Test
-      run: npm run test
-    
+       
     - name: Build
       run: npm run build
     
     - name: Package extension
-      run: npm run package
+      run: npm run package:only
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v3

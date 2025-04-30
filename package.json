@@ -12,6 +12,7 @@
     "quick": "node scripts/build.js --skip-mcp",
     "clean": "rimraf dist",
     "package": "npm run build && node scripts/package.js",
+    "package:only": "node scripts/package.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint src --ext .js",
