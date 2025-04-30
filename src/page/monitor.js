@@ -3,7 +3,7 @@
 
 (async function () {
   // Quick check for debug mode
-  var isProduction = false;
+  let isProduction = false;
   try {
     isProduction = process.env.IS_PRODUCTION;
   } catch (error) {
@@ -21,19 +21,20 @@
     console.log('📡 Running in debug mode - will load modules dynamically');
     
     window.exposeModule = function (moduleExport) {
-        // For CommonJS environments (webpack bundling)
-        if (typeof module !== 'undefined' && module.exports) {
-          module.exports = moduleExport;
-        }
-        // For direct browser usage in debug mode
-        // Get the script ID to expose this module with correct name
-        const currentScript = document.currentScript;
-        if (currentScript && currentScript.id) {
-          window[currentScript.id] = moduleExport;
-        }
-    }
+      // For CommonJS environments (webpack bundling)
+      if (typeof module !== 'undefined' && module.exports) {
+        module.exports = moduleExport;
+      }
+      // For direct browser usage in debug mode
+      // Get the script ID to expose this module with correct name
+      const currentScript = document.currentScript;
+      if (currentScript && currentScript.id) {
+        window[currentScript.id] = moduleExport;
+      }
+    };
 
     // Helper function to dynamically import a module
+    /* eslint-disable no-inner-declarations */
     async function importModule(modulePath) {
       // Create a unique script ID for this import
       const moduleId = 'module_' + Math.random().toString(36).substring(2);
@@ -62,6 +63,7 @@
         document.head.appendChild(script);
       });
     }
+    /* eslint-enable no-inner-declarations */
 
     // Request extension URL and initialize in debug mode
     window.addEventListener('message', function initDebugListener(event) {
@@ -80,11 +82,12 @@
     window.postMessage({ type: 'REQUEST_EXTENSION_URL' }, '*');
 
     // Initialize all modules in debug mode
+    /* eslint-disable no-inner-declarations */
     async function initDebugMode() {
       try {
         // Load all modules in the correct dependency order
         const utils = await importModule('src/page/utils.js');
-        const { PageMcpClient, runDemo } = await importModule('src/page/page-client.js');
+        const { PageMcpClient } = await importModule('src/page/page-client.js');
         const UIManager = await importModule('src/page/ui-manager.js');
         const ToolManager = await importModule('src/page/tool-manager.js');
         const McpUI = await importModule('src/page/mcp-ui.js');
@@ -100,7 +103,6 @@
           McpUI,
           McpManager,
           PageMcpClient,
-          runDemo,
           sendApiMonitorMessage
         });
 
@@ -110,11 +112,12 @@
         console.error('📡 Error initializing debug monitor:', error);
       }
     }
+    /* eslint-enable no-inner-declarations */
   } else {
     // Production mode - direct require approach
     try {
       // Import modules
-      const { PageMcpClient, runDemo } = require('./page-client');
+      const { PageMcpClient } = require('./page-client');
       const { sendApiMonitorMessage } = require('./utils');
       const ToolManager = require('./tool-manager');
       const McpManager = require('./mcp-manager');
@@ -128,7 +131,6 @@
         McpUI,
         McpManager,
         PageMcpClient,
-        runDemo,
         sendApiMonitorMessage
       });
 
@@ -146,7 +148,6 @@
       McpUI,
       McpManager,
       PageMcpClient,
-      runDemo,
       sendApiMonitorMessage
     } = modules;
 
@@ -212,21 +213,12 @@
     // Helper for manual testing
     window.openMcpConfig = () => mcpManager.showServerConfigUI();
 
-    // Run demo function to test MCP connection
-    //await runDemo();
-
     // MCP server management API
     window.addMcpServer = config => mcpManager.addServer(config);
     window.removeMcpServer = id => mcpManager.removeServer(id);
     window.setMcpServerStatus = (id, enabled) => mcpManager.setServerStatus(id, enabled);
     window.getMcpServers = () => mcpManager.getServers();
     window.fetchMcpToolDefinitions = () => mcpManager.fetchToolsDefinitions();
-
-    // Debug mode toggle
-    window.setDebugMode = (enabled) => {
-      window.localStorage.setItem('mcp_debug_mode', enabled ? 'true' : 'false');
-      console.log(`📡 Debug mode ${enabled ? 'enabled' : 'disabled'} - refresh to apply`);
-    };
 
     // Send startup message
     sendApiMonitorMessage('MONITOR_STARTED', { version: '1.0.0' });

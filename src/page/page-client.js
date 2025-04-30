@@ -224,6 +224,7 @@ const moduleExports = {
 };
 
 // Support different module systems
+/* eslint-disable no-undef */
 if (typeof exposeModule === 'function') {
   exposeModule(moduleExports);
 } else if (typeof module !== 'undefined' && module.exports) {
@@ -232,3 +233,4 @@ if (typeof exposeModule === 'function') {
   // Make available in window scope for direct browser usage
   window.mcpPageClient = moduleExports;
 }
+/* eslint-enable no-undef */

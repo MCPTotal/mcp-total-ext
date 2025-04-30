@@ -254,7 +254,7 @@ class McpManager {
         return;
       }
 
-      var tools = [...this.builtInTools];
+      const tools = [...this.builtInTools];
 
       // Add MCP tools for each enabled server
       for (const server of enabledServers) {
@@ -264,12 +264,12 @@ class McpManager {
           let toolDefinitions = [];
           
           // Try to fetch real tool definitions from the server
-            try {
-              toolDefinitions = await this.fetchToolsFromServer(server);
-              console.log(`📡 Successfully fetched ${toolDefinitions.length} tools from ${server.id}`);
-            } catch (error) {
-              console.error(`📡 Error fetching tools from server ${server.id}:`, error);
-            }
+          try {
+            toolDefinitions = await this.fetchToolsFromServer(server);
+            console.log(`📡 Successfully fetched ${toolDefinitions.length} tools from ${server.id}`);
+          } catch (error) {
+            console.error(`📡 Error fetching tools from server ${server.id}:`, error);
+          }
 
 
           // Process and add each tool with the server prefix
@@ -339,7 +339,7 @@ class McpManager {
     try {
       const client = new this.pageMcpClient(server.url);
       await client.connect();
-      var tools = await client.listTools();
+      const tools = await client.listTools();
       await client.disconnect();
       
       
@@ -418,6 +418,7 @@ class McpManager {
   }
 }
 
+/* eslint-disable no-undef */
 if (typeof exposeModule === 'function') {
   exposeModule(McpManager);
 } else {
@@ -425,3 +426,4 @@ if (typeof exposeModule === 'function') {
     module.exports = McpManager;
   }
 }
+/* eslint-enable no-undef */ 

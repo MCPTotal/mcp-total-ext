@@ -15,6 +15,11 @@
   "globals": {
     "chrome": "readonly"
   },
+  "ignorePatterns": [
+    "src/mcpClient/mcp-browser-generated.js",
+    "**/*.generated.js",
+    "dist/**/*"
+  ],
   "rules": {
     "no-unused-vars": "warn",
     "no-console": "off",

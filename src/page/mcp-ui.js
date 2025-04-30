@@ -121,7 +121,7 @@ class McpUI {
         `;
         serverList.appendChild(emptyMsg);
       } else {
-        this.mcpManager.servers.forEach((server, idx) => {
+        this.mcpManager.servers.forEach((server) => {
           const serverItem = document.createElement('div');
           serverItem.style.cssText = `
             display: flex;
@@ -485,7 +485,6 @@ class McpUI {
     
     // Define shortcut text for notification
     const shortcutText = isMac ? 'Control+M' : 'Ctrl+M';
-    const shortcutSymbol = isMac ? '⌥M' : 'Ctrl+M';
     
     // Remove any existing listeners first (just in case)
     this._removeExistingKeydownListeners();
@@ -629,10 +628,12 @@ class McpUI {
 }
 
 // Export the class
+/* eslint-disable no-undef */
 if (typeof exposeModule === 'function') {
   exposeModule(McpUI);
 } else {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = McpUI;
   }
-} 
+}
+/* eslint-enable no-undef */ 

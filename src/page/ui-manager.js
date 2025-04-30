@@ -364,7 +364,7 @@ class UIManager {
       // Handle promise result
       if (toolResult && typeof toolResult === 'object' && typeof toolResult.then === 'function') {
         console.log('📡 Tool returned a Promise, waiting for resolution');
-          toolResult = await toolResult;
+        toolResult = await toolResult;
       }
 
       // Store the result
@@ -835,7 +835,9 @@ class UIManager {
         setTimeout(() => {
           try {
             errorDiv.remove();
-          } catch (e) {}
+          } catch (e) {
+            // Ignore errors during cleanup - element might already be removed
+          }
         }, 10000);
       }
     } catch (e) {
@@ -844,6 +846,8 @@ class UIManager {
   }
 }
 
+// Export the class
+/* eslint-disable no-undef */
 if (typeof exposeModule === 'function') {
   exposeModule(UIManager);
 } else {
@@ -851,3 +855,4 @@ if (typeof exposeModule === 'function') {
     module.exports = UIManager;
   }
 }
+/* eslint-enable no-undef */

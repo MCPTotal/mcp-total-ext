@@ -29,7 +29,7 @@ For example, to get the current time, respond with:
 [/TOOL_CALL]
 
 I will provide you with the result. Then continue the conversation.
-`
+`;
 
   constructor(uiManager) {
     this.uiManager = uiManager;
@@ -216,7 +216,7 @@ I will provide you with the result. Then continue the conversation.
     let chunk = '';
 
     try {
-      var isDone = false;
+      let isDone = false;
       while (false === isDone) {
         const { done, value } = await reader.read();
         isDone = done;
@@ -268,7 +268,7 @@ I will provide you with the result. Then continue the conversation.
             // Return the detected tool calls for processing
             return toolCalls.map(toolCall => {
               // Add the bound callback to each tool call
-              toolCall.execute = params =>
+              toolCall.execute = () =>
                 boundExecuteToolCall(toolCall.tool, toolCall.parameters);
               return toolCall;
             });
@@ -568,15 +568,15 @@ I will provide you with the result. Then continue the conversation.
 
   getToolsDefinitions() {
     return this.toolDefinitions.map(tool => {
-        let params = '';
-        if (tool.parameters && Object.keys(tool.parameters).length > 0) {
-          params = Object.entries(tool.parameters)
-            .map(([name, param]) => `\t* ${name}: ${param.description}`)
-            .join('\n');
-          params = `\nPARAMS:\n${params}`;
-        }
-        return `TOOL: ${tool.name}: ${tool.description}${params}`;
-      });
+      let params = '';
+      if (tool.parameters && Object.keys(tool.parameters).length > 0) {
+        params = Object.entries(tool.parameters)
+          .map(([name, param]) => `\t* ${name}: ${param.description}`)
+          .join('\n');
+        params = `\nPARAMS:\n${params}`;
+      }
+      return `TOOL: ${tool.name}: ${tool.description}${params}`;
+    });
   }
 
 
@@ -608,7 +608,7 @@ I will provide you with the result. Then continue the conversation.
     }
   }
 
-/*
+  /*
 
 {
   "object": "user_system_message_detail",
@@ -676,7 +676,8 @@ I will provide you with the result. Then continue the conversation.
           completePrompt.slice(startIndex, endIndex).join('\n\n')
         );
         
-        while (newFieldContent.length < ToolManager.CHAR_LIMIT && endIndex < completePrompt.length) {
+        while (newFieldContent.length < ToolManager.CHAR_LIMIT && 
+            endIndex < completePrompt.length) {
           updatedSettings[field] = newFieldContent;
           newStartIndex = endIndex;
           endIndex++;
@@ -735,6 +736,7 @@ I will provide you with the result. Then continue the conversation.
 }
 
 
+/* eslint-disable no-undef */
 if (typeof exposeModule === 'function') {
   exposeModule(ToolManager);
 } else {
@@ -742,3 +744,4 @@ if (typeof exposeModule === 'function') {
     module.exports = ToolManager;
   }
 }
+/* eslint-enable no-undef */ 

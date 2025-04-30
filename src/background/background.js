@@ -20,7 +20,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: true, result: response });
     })
     .catch(error => {
-      console.error("MCP request error:", error);
+      console.error('MCP request error:', error);
       sendResponse({ 
         success: false, 
         error: error instanceof Error ? error.message : String(error) 

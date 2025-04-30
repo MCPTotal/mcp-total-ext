@@ -1,6 +1,6 @@
 // Import the necessary parts from the MCP SDK
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 
 // Create a browser-friendly wrapper around the MCP client
 class BrowserMcpClient {
@@ -22,8 +22,8 @@ class BrowserMcpClient {
     try {
       // Create client instance
       this.client = new Client({
-        name: "browser-mcp-client",
-        version: "1.0.0"
+        name: 'browser-mcp-client',
+        version: '1.0.0'
       });
 
       // Create SSE transport
@@ -125,7 +125,7 @@ class BrowserMcpClient {
     try {
       console.log(`Reading resource from ${uri}`);
       const response = await this.client.readResource({ uri });
-      console.log(`Resource result:`, response);
+      console.log('Resource result:', response);
       return response;
     } catch (error) {
       console.error(`Error reading resource ${uri}:`, error);
@@ -161,7 +161,7 @@ class BrowserMcpClient {
         name,
         arguments: args
       });
-      console.log(`Prompt result:`, response);
+      console.log('Prompt result:', response);
       return response;
     } catch (error) {
       console.error(`Error getting prompt ${name}:`, error);
@@ -189,7 +189,7 @@ class BrowserMcpClient {
 // Try to import Streamable HTTP transport if available
 let StreamableHTTPClientTransport;
 try {
-  StreamableHTTPClientTransport = require("@modelcontextprotocol/sdk/client/streamableHttp.js").StreamableHTTPClientTransport;
+  StreamableHTTPClientTransport = require('@modelcontextprotocol/sdk/client/streamableHttp.js').StreamableHTTPClientTransport;
 } catch (error) {
   console.log('StreamableHTTPClientTransport not available, falling back to SSE transport only');
 }

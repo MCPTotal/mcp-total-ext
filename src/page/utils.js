@@ -19,6 +19,7 @@ const utils = {
   sendApiMonitorMessage,
 };
 
+/* eslint-disable no-undef */
 if (typeof exposeModule === 'function') {
   exposeModule(utils);
 } else {
@@ -26,3 +27,4 @@ if (typeof exposeModule === 'function') {
     module.exports = utils;
   }
 }
+/* eslint-enable no-undef */
