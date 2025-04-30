@@ -9,7 +9,7 @@ A Chrome extension that seamlessly integrates Model Context Protocol (MCP) serve
 - Execute MCP tools directly within ChatGPT conversations
 - Server configuration management via browser UI
 - Built-in demo tools for testing functionality
-- Built on the official MCP protocol specification
+- Built-in the official MCP protocol specification
 - Asynchronous tool execution with proper error handling
 
 ## Installation
@@ -21,18 +21,18 @@ A Chrome extension that seamlessly integrates Model Context Protocol (MCP) serve
 ### For Development
 
 1. Clone this repository:
-   ```bash
-   git clone https://github.com/yourusername/mcp-tools-for-chatgpt.git
-   cd mcp-tools-for-chatgpt
+   ```sh
+   git clone https://github.com/piiano/mcp-chrome-ext.git
+   cd mcp-chrome-ext
    ```
 
 2. Install dependencies:
-   ```bash
+   ```sh
    npm install
    ```
 
 3. Build the extension:
-   ```bash
+   ```sh
    # Build both MCP client and extension
    npm run build
    
@@ -111,7 +111,7 @@ http://localhost:8020/sse
 
 1. Install the extension in Chrome
 2. Start a local MCP server:
-   ```bash
+   ```sh
    # Install FastMCP if you don't have it
    pip install fastmcp
    
@@ -236,7 +236,7 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on contributing to 
 
 ## License
 
-[MIT License](LICENSE)
+[MIT License](LICENSE.md)
 
 ## Credits
 

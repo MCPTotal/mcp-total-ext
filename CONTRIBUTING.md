@@ -1,6 +1,6 @@
 # Contributing to MCP Tools for ChatGPT
 
-Thank you for your interest in contributing to MCP Tools for ChatGPT! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Browser MCP Tools extension! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct
 
