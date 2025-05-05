@@ -8,6 +8,29 @@ class McpUI {
     this._onShowServerConfigUI = null;
     this._activeModal = null; // Track the currently active modal
     this._escKeyListener = null; // Track ESC key listener
+    
+    // Define consistent color palette
+    this.colors = {
+      primary: '#4b5563',       // Main button color (slate gray)
+      primaryLight: '#6b7280',  // Light variant for hover
+      success: '#10b981',       // Success/enable actions
+      successLight: '#34d399',  // Light variant for hover
+      danger: '#ef4444',        // Danger/delete actions
+      dangerLight: '#f87171',   // Light variant for hover
+      info: '#3b82f6',          // Info/edit actions
+      infoLight: '#60a5fa',     // Light variant for hover
+      
+      // UI colors
+      border: '#e5e7eb',
+      background: '#ffffff',
+      backgroundLight: '#f9fafb',
+      text: '#1f2937',
+      textSecondary: '#6b7280',
+      
+      // Status colors
+      statusEnabled: '#10b981',
+      statusDisabled: '#ef4444'
+    };
   }
 
   /**
@@ -128,17 +151,17 @@ class McpUI {
             justify-content: space-between;
             align-items: center;
             padding: 10px;
-            border: 1px solid #eee;
+            border: 1px solid ${this.colors.border};
             border-radius: 4px;
             margin-bottom: 8px;
-            background: ${server.enabled ? '#f0f9ff' : '#f9f9f9'};
+            background: ${server.enabled ? this.colors.backgroundLight : this.colors.background};
           `;
           
           const serverInfo = document.createElement('div');
           serverInfo.innerHTML = `
             <div style="font-weight: bold;">${server.id}</div>
-            <div style="font-size: 12px; color: #666; margin-top: 4px;">${server.url}</div>
-            <div style="font-size: 12px; color: ${server.enabled ? '#10b981' : '#ef4444'}; margin-top: 2px;">
+            <div style="font-size: 12px; color: ${this.colors.textSecondary}; margin-top: 4px;">${server.url}</div>
+            <div style="font-size: 12px; color: ${server.enabled ? this.colors.statusEnabled : this.colors.statusDisabled}; margin-top: 2px;">
               ${server.enabled ? '●' : '○'} ${server.enabled ? 'Enabled' : 'Disabled'}
             </div>
           `;
@@ -149,7 +172,7 @@ class McpUI {
           const toggleBtn = document.createElement('button');
           toggleBtn.textContent = server.enabled ? 'Disable' : 'Enable';
           toggleBtn.style.cssText = `
-            background: ${server.enabled ? '#f97316' : '#10b981'};
+            background: ${server.enabled ? this.colors.danger : this.colors.success};
             color: white;
             border: none;
             border-radius: 4px;
@@ -157,17 +180,27 @@ class McpUI {
             margin-right: 6px;
             cursor: pointer;
             font-size: 12px;
+            transition: background-color 0.2s ease;
           `;
           toggleBtn.onclick = () => {
             this.mcpManager.setServerStatus(server.id, !server.enabled);
             renderServerList();
           };
           
+          // Add hover effects for toggleBtn after creating it
+          toggleBtn.addEventListener('mouseover', () => {
+            toggleBtn.style.backgroundColor = server.enabled ? this.colors.dangerLight : this.colors.successLight;
+          });
+          
+          toggleBtn.addEventListener('mouseout', () => {
+            toggleBtn.style.backgroundColor = server.enabled ? this.colors.danger : this.colors.success;
+          });
+          
           // Edit button
           const editBtn = document.createElement('button');
           editBtn.textContent = 'Edit';
           editBtn.style.cssText = `
-            background: #3b82f6;
+            background: ${this.colors.info};
             color: white;
             border: none;
             border-radius: 4px;
@@ -175,22 +208,33 @@ class McpUI {
             margin-right: 6px;
             cursor: pointer;
             font-size: 12px;
+            transition: background-color 0.2s ease;
           `;
           editBtn.onclick = () => {
             showServerForm(server);
           };
           
+          // Add hover effects for editBtn after creating it
+          editBtn.addEventListener('mouseover', () => {
+            editBtn.style.backgroundColor = this.colors.infoLight;
+          });
+          
+          editBtn.addEventListener('mouseout', () => {
+            editBtn.style.backgroundColor = this.colors.info;
+          });
+          
           // Delete button
           const deleteBtn = document.createElement('button');
           deleteBtn.textContent = 'Delete';
           deleteBtn.style.cssText = `
-            background: #ef4444;
+            background: ${this.colors.danger};
             color: white;
             border: none;
             border-radius: 4px;
             padding: 4px 8px;
             cursor: pointer;
             font-size: 12px;
+            transition: background-color 0.2s ease;
           `;
           deleteBtn.onclick = () => {
             if (confirm(`Are you sure you want to delete the server "${server.id}"?`)) {
@@ -198,6 +242,15 @@ class McpUI {
               renderServerList();
             }
           };
+          
+          // Add hover effects for deleteBtn after creating it
+          deleteBtn.addEventListener('mouseover', () => {
+            deleteBtn.style.backgroundColor = this.colors.dangerLight;
+          });
+          
+          deleteBtn.addEventListener('mouseout', () => {
+            deleteBtn.style.backgroundColor = this.colors.danger;
+          });
           
           actionButtons.appendChild(toggleBtn);
           actionButtons.appendChild(editBtn);
@@ -214,7 +267,7 @@ class McpUI {
     const addButton = document.createElement('button');
     addButton.textContent = 'Add New MCP Server';
     addButton.style.cssText = `
-      background: #8e44ad;
+      background: ${this.colors.primary};
       color: white;
       border: none;
       border-radius: 4px;
@@ -223,7 +276,17 @@ class McpUI {
       font-weight: bold;
       width: 100%;
       margin-bottom: 20px;
+      transition: background-color 0.2s ease;
     `;
+    
+    // Add hover effects for addButton after creating it
+    addButton.addEventListener('mouseover', () => {
+      addButton.style.backgroundColor = this.colors.primaryLight;
+    });
+    
+    addButton.addEventListener('mouseout', () => {
+      addButton.style.backgroundColor = this.colors.primary;
+    });
     
     // Create form container (initially hidden)
     const formContainer = document.createElement('div');
@@ -333,6 +396,20 @@ class McpUI {
       document.getElementById('cancel-btn').onclick = () => {
         formContainer.style.display = 'none';
       };
+
+      // After setting formContainer.style.display = 'block'
+      // Add this code to update the save button styling
+      const saveBtn = document.getElementById('save-btn');
+      saveBtn.style.backgroundColor = this.colors.primary;
+
+      // Add hover effects for save button
+      saveBtn.addEventListener('mouseover', () => {
+        saveBtn.style.backgroundColor = this.colors.primaryLight;
+      });
+
+      saveBtn.addEventListener('mouseout', () => {
+        saveBtn.style.backgroundColor = this.colors.primary;
+      });
     };
     
     // Handle add button click
@@ -344,7 +421,7 @@ class McpUI {
     const closeButton = document.createElement('button');
     closeButton.textContent = 'Close';
     closeButton.style.cssText = `
-      background: #6b7280;
+      background: ${this.colors.primary};
       color: white;
       border: none;
       border-radius: 4px;
@@ -352,10 +429,20 @@ class McpUI {
       cursor: pointer;
       font-weight: bold;
       margin-top: 20px;
+      transition: background-color 0.2s ease;
     `;
     closeButton.onclick = () => {
       this._closeActiveModal();
     };
+    
+    // Add hover effects for closeButton after creating it
+    closeButton.addEventListener('mouseover', () => {
+      closeButton.style.backgroundColor = this.colors.primaryLight;
+    });
+    
+    closeButton.addEventListener('mouseout', () => {
+      closeButton.style.backgroundColor = this.colors.primary;
+    });
     
     // Add keyboard shortcut hint to close button
     const escHint = document.createElement('span');
@@ -374,7 +461,7 @@ class McpUI {
     const testConnectionButton = document.createElement('button');
     testConnectionButton.textContent = 'Test All Connections';
     testConnectionButton.style.cssText = `
-      background: #10b981;
+      background: ${this.colors.success};
       color: white;
       border: none;
       border-radius: 4px;
@@ -384,6 +471,7 @@ class McpUI {
       margin-top: 10px;
       margin-bottom: 20px;
       width: 100%;
+      transition: background-color 0.2s ease;
     `;
     testConnectionButton.onclick = async () => {
       testConnectionButton.textContent = 'Testing...';
@@ -408,6 +496,15 @@ class McpUI {
       testConnectionButton.textContent = 'Test All Connections';
       testConnectionButton.disabled = false;
     };
+    
+    // Add hover effects for testConnectionButton after creating it
+    testConnectionButton.addEventListener('mouseover', () => {
+      testConnectionButton.style.backgroundColor = this.colors.successLight;
+    });
+    
+    testConnectionButton.addEventListener('mouseout', () => {
+      testConnectionButton.style.backgroundColor = this.colors.success;
+    });
     
     // Assemble everything
     modalContent.appendChild(heading);

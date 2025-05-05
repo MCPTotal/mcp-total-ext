@@ -7,6 +7,31 @@ class UIManager {
     this.toolPreferences = {};
     // Load preferences from localStorage on initialization
     this.loadToolPreferences();
+    
+    // Define consistent color palette
+    this.colors = {
+      primary: '#4b5563',       // Main button color (slate gray)
+      primaryLight: '#6b7280',  // Light variant for hover
+      success: '#10b981',       // Success/enable actions
+      successLight: '#34d399',  // Light variant for hover
+      danger: '#ef4444',        // Danger/delete actions
+      dangerLight: '#f87171',   // Light variant for hover
+      info: '#3b82f6',          // Info/edit actions
+      infoLight: '#60a5fa',     // Light variant for hover
+      purple: '#6d28d9',        // Tool buttons (purple)
+      purpleLight: '#7c3aed',   // Light variant for hover
+      
+      // UI colors
+      border: '#e5e7eb',
+      background: '#ffffff',
+      backgroundLight: '#f9fafb',
+      text: '#1f2937',
+      textSecondary: '#6b7280',
+      
+      // Highlight colors
+      highlightBg: '#f3f4f6',
+      highlightText: '#4f46e5'
+    };
   }
 
   // Load tool preferences from localStorage
@@ -52,7 +77,7 @@ class UIManager {
     settingsButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
     settingsButton.title = 'Tool settings';
     settingsButton.style.cssText = `
-      background-color: #4b5563;
+      background-color: ${this.colors.primary};
       color: white;
       border: none;
       border-radius: 6px;
@@ -76,11 +101,11 @@ class UIManager {
 
     // Add settings button hover effects
     settingsButton.addEventListener('mouseover', () => {
-      settingsButton.style.backgroundColor = '#6b7280';
+      settingsButton.style.backgroundColor = this.colors.primaryLight;
     });
 
     settingsButton.addEventListener('mouseout', () => {
-      settingsButton.style.backgroundColor = '#4b5563';
+      settingsButton.style.backgroundColor = this.colors.primary;
     });
 
     // Add settings button click handler
@@ -125,11 +150,11 @@ class UIManager {
     settingsMenu.className = 'tool-settings-menu';
     settingsMenu.style.cssText = `
       background-color: white;
-      border: 1px solid #e5e7eb;
+      border: 1px solid ${this.colors.border};
       border-radius: 8px;
       padding: 6px;
       margin-top: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
       display: none;
       position: absolute;
       z-index: 1000;
@@ -185,7 +210,7 @@ class UIManager {
 
     button.innerHTML = `
       <div style="display: flex; align-items: center;">
-        <span style="margin-right: 8px; color: ${isSelected ? '#4f46e5' : '#6b7280'};">${icon}</span>
+        <span style="margin-right: 8px; color: ${isSelected ? this.colors.highlightText : this.colors.textSecondary};">${icon}</span>
         <span>${label}</span>
       </div>
     `;
@@ -201,8 +226,8 @@ class UIManager {
       border-radius: 6px;
       cursor: pointer;
       font-size: 14px;
-      background-color: ${isSelected ? '#f3f4f6' : 'transparent'};
-      color: ${isSelected ? '#4f46e5' : '#1f2937'};
+      background-color: ${isSelected ? this.colors.highlightBg : 'transparent'};
+      color: ${isSelected ? this.colors.highlightText : this.colors.text};
       font-weight: ${isSelected ? '500' : 'normal'};
       font-family: var(--font-family-sans, system-ui, sans-serif);
       transition: all 0.2s ease;
@@ -212,11 +237,11 @@ class UIManager {
 
     // Add hover effect
     button.addEventListener('mouseover', () => {
-      button.style.backgroundColor = isSelected ? '#f3f4f6' : '#f9fafb';
+      button.style.backgroundColor = isSelected ? this.colors.highlightBg : this.colors.backgroundLight;
     });
 
     button.addEventListener('mouseout', () => {
-      button.style.backgroundColor = isSelected ? '#f3f4f6' : 'transparent';
+      button.style.backgroundColor = isSelected ? this.colors.highlightBg : 'transparent';
     });
 
     // Click handler
@@ -252,25 +277,25 @@ class UIManager {
     Array.from(settingsMenu.children).forEach(button => {
       if (button.value === currentMode) {
         // Selected option
-        button.style.backgroundColor = '#f3f4f6';
-        button.style.color = '#4f46e5';
+        button.style.backgroundColor = this.colors.highlightBg;
+        button.style.color = this.colors.highlightText;
         button.style.fontWeight = '500';
 
         // Update icon color
         const svgElement = button.querySelector('svg');
         if (svgElement) {
-          svgElement.style.color = '#4f46e5';
+          svgElement.style.color = this.colors.highlightText;
         }
       } else {
         // Non-selected options
         button.style.backgroundColor = 'transparent';
-        button.style.color = '#1f2937';
+        button.style.color = this.colors.text;
         button.style.fontWeight = 'normal';
 
         // Update icon color
         const svgElement = button.querySelector('svg');
         if (svgElement) {
-          svgElement.style.color = '#6b7280';
+          svgElement.style.color = this.colors.textSecondary;
         }
       }
     });
@@ -522,7 +547,7 @@ class UIManager {
     toolButton.textContent = originalToolName;
     toolButton.className = 'tool-run-button';
     toolButton.style.cssText = `
-      background-color: #8e44ad;
+      background-color: ${this.colors.purple};
       color: white;
       border: none;
       border-radius: 6px;
@@ -541,11 +566,11 @@ class UIManager {
 
     // Add hover effect
     toolButton.addEventListener('mouseover', () => {
-      toolButton.style.backgroundColor = '#9b59b6';
+      toolButton.style.backgroundColor = this.colors.purpleLight;
     });
 
     toolButton.addEventListener('mouseout', () => {
-      toolButton.style.backgroundColor = '#8e44ad';
+      toolButton.style.backgroundColor = this.colors.purple;
     });
 
     // Flag to track if the tool has been executed
@@ -557,7 +582,7 @@ class UIManager {
     sendButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
     sendButton.title = 'Send result to chat';
     sendButton.style.cssText = `
-      background-color: #6d28d9;
+      background-color: ${this.colors.purple};
       color: white;
       border: none;
       border-radius: 6px;
@@ -581,11 +606,11 @@ class UIManager {
 
     // Add hover effect to send button
     sendButton.addEventListener('mouseover', () => {
-      sendButton.style.backgroundColor = '#7c3aed';
+      sendButton.style.backgroundColor = this.colors.purpleLight;
     });
 
     sendButton.addEventListener('mouseout', () => {
-      sendButton.style.backgroundColor = '#6d28d9';
+      sendButton.style.backgroundColor = this.colors.purple;
     });
 
     // Add click handler to the tool button
@@ -817,14 +842,15 @@ class UIManager {
       const errorDiv = document.createElement('div');
       errorDiv.className = 'tool-error-message';
       errorDiv.textContent = message;
-      errorDiv.style.cssText =
-        'background-color: #f8d7da;' +
-        'color: #721c24;' +
-        'padding: 10px;' +
-        'margin: 10px 0;' +
-        'border-radius: 4px;' +
-        'border: 1px solid #f5c6cb;' +
-        'font-size: 14px;';
+      errorDiv.style.cssText = `
+        background-color: #fee2e2;
+        color: ${this.colors.danger};
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+        border: 1px solid ${this.colors.danger};
+        font-size: 14px;
+      `;
 
       // Find the chat content area to inject the message
       const chatContainer = document.querySelector('[role="main"]');
