@@ -1,70 +1,69 @@
 # Privacy Policy for MCP for ChatGPT
 
-Last Updated: April 30, 2023
+**Last Updated: April 30, 2023**
 
 ## Overview
 
-MCP for ChatGPT ("the Extension") is committed to protecting your privacy. This Privacy Policy explains what information we collect, how we use it, and the choices you have regarding your information.
+MCP for ChatGPT ("the Extension") is a browser extension that helps users connect ChatGPT to their own backend tools using the Model Context Protocol (MCP). This Privacy Policy explains what information is used by the Extension and how it is handled.
 
 ## Information Collection and Use
 
-### Information We Collect
+### What We Collect
 
-The Extension collects and stores the following information:
+The Extension stores the following information **locally in your browser**:
 
-- **MCP Server Configurations**: The Extension stores the MCP server configurations you provide, including server URLs and API keys. This information is stored locally in your browser.
+- **MCP server configurations**, including server URLs and API keys, provided by you.
 
-- **Tool Parameters**: When you use MCP tools through the Extension, the specific parameters required for the tool's execution are sent to the MCP server you have configured.
+When you manually trigger a tool, the necessary parameters for that specific tool call are sent directly to the MCP server you configured. These parameters are **not stored** by the Extension.
 
-### Information We Do Not Collect
+### What We Do Not Collect
 
-The Extension does not:
+The Extension does **not**:
 
 - Collect or transmit your ChatGPT conversations
-- Track your browsing history
-- Collect personal information beyond what is necessary for functioning
-- Use analytics or tracking tools
-- Store your data on our servers
+- Collect personally identifiable information
+- Transmit any data to the developers or any third parties by default
+
+Data is only sent to MCP servers **you explicitly added**  and **only when you triggered a tool call**.
 
 ## Data Storage
 
-All configuration data is stored locally in your browser. This data does not leave your device except when necessary to communicate with your configured MCP servers.
+All configuration data is stored locally in your browser. It never leaves your device except when interacting with an MCP server that you have configured.
 
 ## Data Sharing
 
-The Extension does not share your data with any third parties except:
+The Extension does not share data with third parties except:
 
-- The MCP servers you explicitly configure, which receive only the specific parameters needed for tool execution
-- OpenAI's API, to register tools and handle tool calls within the ChatGPT interface
+- **Your configured MCP servers**, which receive only the tool-specific parameters when you initiate a tool call
 
 ## Security
 
-We implement appropriate security measures to protect your information. However, please be aware that no method of transmission over the internet or electronic storage is 100% secure.
+We apply reasonable security practices for local storage. However, communication with MCP servers occurs over the network and is subject to the security of those servers.
 
-## Your Rights
+## Your Control
 
 You have full control over your data:
 
-- You can view all stored server configurations through the Extension's interface
-- You can delete server configurations at any time
-- You can disable or remove the Extension completely
+- View or delete MCP configurations anytime via the Extension interface
+- Remove the Extension to fully clear all stored data
 
 ## Third-Party Services
 
-The Extension connects to MCP servers that you configure. We have no control over the content, privacy policies, or practices of these servers. We encourage you to review the privacy policies of any MCP servers you connect to.
+The Extension connects only to MCP servers that you explicitly configure. We do not control or monitor those services and encourage you to review their privacy practices.
 
 ## Children's Privacy
 
-The Extension is not directed to children under 13. We do not knowingly collect information from children under 13. If you believe we have collected information from a child under 13, please contact us.
+This Extension is not intended for children under 13 and does not knowingly collect data from them.
 
-## Changes to This Privacy Policy
+## Changes to This Policy
 
-We may update our Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Last Updated" date.
+Any updates to this policy will be posted here, with the updated "Last Updated" date.
 
-## Contact Information
+## Contact
 
-If you have any questions about this Privacy Policy, please create an issue in our GitHub repository at https://github.com/piiano/mcp-chrome-ext.
+For questions or concerns, please contact us at [info@piiano.com]  
+or open an issue at [https://github.com/piiano/mcp-chrome-ext](https://github.com/piiano/mcp-chrome-ext).
 
 ## Consent
 
-By using the Extension, you consent to our Privacy Policy and agree to its terms. 
+By using the Extension, you consent to this Privacy Policy and its terms.
