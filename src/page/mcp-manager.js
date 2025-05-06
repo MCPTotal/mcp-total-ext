@@ -72,7 +72,7 @@ class McpManager {
   GetBuiltInTools() {
     const builtInTools = [];
     builtInTools.push({
-      name: 'getCurrentTime',
+      name: 'time-get_current',
       description: 'Get the current date and time',
       parameters: {},
       callback: () => new Date().toISOString(),

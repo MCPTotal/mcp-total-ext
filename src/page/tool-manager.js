@@ -4,12 +4,11 @@
 class ToolManager {
   // Static properties
   static CHAR_LIMIT = 1500; // Character limit per field for system messages
-  static TOOL_SECTION_START = '<!-- TSS -->';
-  static TOOL_SECTION_END = '<!-- TSE -->';
-  static SYSTEM_PROMPT = `
-  I have access to several tools (mentioned with "TOOL:" in the system prompt) that can help you answer my queries.
-When you need to use a tool, tell me, I'll run it and tell you the result.
-Always!!! respond in this exact format (including the [TOOL_CALL] and [/TOOL_CALL] tags) outside of any block:
+  static TOOL_SECTION_START = '<!-- TOOLS_START -->';
+  static TOOL_SECTION_END = '<!-- TOOLS_END -->';
+  static SYSTEM_PROMPT = `I have access to several tools, I can run for you when needed and reply with the result.
+The tools are described in system prompt  between the '<!--TOOLS_START-->' and '<!--TOOLS_END-->' tags.
+When you need to use a tool, respond in this exact full format:
 """
 [TOOL_CALL]
 {
@@ -20,28 +19,10 @@ Always!!! respond in this exact format (including the [TOOL_CALL] and [/TOOL_CAL
 }
 [/TOOL_CALL]
 """
-
-Note: You must! respond in this exact format in raw text, not in a block.
-For example, for the tool defined as:
+And I will run the tool and send you the result.
+IMPORTANT: You must! respond in this exact full format, including the [TOOL_CALL] and [/TOOL_CALL] tags!!!
+ALWAYS RESPOND WITH FULL TOOL CALL FORMAT!
 """
-TOOL: bb-list_directory: Get a detailed listing of all files and directories in a specified path.
-PARAMS:
-	* path: path
-"""
-
-You should respond with:
-"""
-[TOOL_CALL]
-{
-  "tool": "bb-list_directory",
-  "parameters": {
-    "path": "/path/to/directory"
-  }
-}
-[/TOOL_CALL]
-"""
-
-I will provide you with the result. Then continue the conversation.
 `;
 
   constructor(uiManager) {

@@ -51,9 +51,6 @@ class BrowserMcpClient {
       
       console.log('Connected to MCP server:', this.serverUrl);
       
-      // Fetch tools after connection
-      await this.listTools();
-      
       return true;
     } catch (error) {
       console.error('Error connecting to MCP server:', error);

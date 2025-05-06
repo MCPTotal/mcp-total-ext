@@ -151,8 +151,8 @@ class UIManager {
     settingsMenu.style.cssText = `
       background-color: white;
       border: 1px solid ${this.colors.border};
-      border-radius: 8px;
-      padding: 6px;
+      border-radius: 6px;
+      padding: 4px;
       margin-top: 8px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
       display: none;
@@ -160,19 +160,23 @@ class UIManager {
       z-index: 1000;
       width: 180px;
       right: 0;
-      overflow: hidden;
+      max-height: 140px;
+      overflow-y: auto;
     `;
 
     // Get current preferences
     const currentToolPrefs = this.getToolPreference(toolCall.tool);
     const currentMode = currentToolPrefs.mode || 'manual';
 
-    // Create the three mode buttons
+    // Use smaller icon size for a more compact look
+    const iconSize = "12";
+    
+    // Create the three mode buttons with smaller icons
     const manualButton = this.createModeButton(
       'Manual',
       'manual',
       currentMode,
-      '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>',
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`,
       toolCall,
       toolButton
     );
@@ -181,7 +185,7 @@ class UIManager {
       'Auto-run',
       'autorun',
       currentMode,
-      '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>',
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`,
       toolCall,
       toolButton
     );
@@ -190,7 +194,7 @@ class UIManager {
       'Auto-run and send',
       'autosend',
       currentMode,
-      '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path></svg>',
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path></svg>`,
       toolCall,
       toolButton
     );
@@ -220,19 +224,22 @@ class UIManager {
     button.style.cssText = `
       width: 100%;
       text-align: left;
-      padding: 10px 12px;
-      margin-bottom: 2px;
+      padding: 6px 8px;
+      margin-bottom: 1px;
       border: none;
-      border-radius: 6px;
+      border-radius: 4px;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 13px;
       background-color: ${isSelected ? this.colors.highlightBg : 'transparent'};
       color: ${isSelected ? this.colors.highlightText : this.colors.text};
       font-weight: ${isSelected ? '500' : 'normal'};
       font-family: var(--font-family-sans, system-ui, sans-serif);
       transition: all 0.2s ease;
-      position: relative;
-      overflow: hidden;
+      height: 32px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
     `;
 
     // Add hover effect
@@ -302,58 +309,61 @@ class UIManager {
   }
 
   getToolCallElement(toolCall) {
-    // Find the latest message container
+    // Find all assistant message containers
     const messageContainers = document.querySelectorAll('[data-message-author-role="assistant"]');
-    if (messageContainers.length === 0) return;
+    if (messageContainers.length === 0) {
+      console.log('📡 No message containers found');
+      return {};
+    }
 
-    const latestMessage = messageContainers[messageContainers.length - 1];
-
-    // Find the SPECIFIC tool call text matching this tool call
-    const markdownElements = latestMessage.querySelectorAll('.markdown p, .prose p');
+    // Start with the most recent message first
+    // Iterate through message containers from newest to oldest
     let toolCallElement = null;
     let toolCallText = '';
-    let toolCallPattern = '';
 
-    // Prepare regex pattern to find this specific tool call
-    if (toolCall.tool && toolCall.parameters) {
-      const paramKey = Object.keys(toolCall.parameters)[0] || '';
-      const paramValue = toolCall.parameters[paramKey] || '';
-      if (paramKey && paramValue) {
-        // Look for text containing this specific tool and parameter
-        toolCallPattern = `"tool"\\s*:\\s*"${toolCall.tool}"[\\s\\S]*?"${paramKey}"\\s*:\\s*"${paramValue}"`;
-      } else {
-        // Just look for the tool name
-        toolCallPattern = `"tool"\\s*:\\s*"${toolCall.tool}"`;
-      }
-    }
+    for (let i = messageContainers.length - 1; i >= 0 && i > messageContainers.length - 5; i--) {
+      const latestMessage = messageContainers[i];
+      console.log('* Looking for tool call:', toolCall.tool, 'in message', i);
 
-    // Go through each paragraph element and check for our specific tool call
-    for (const element of markdownElements) {
-      const text = element.textContent || '';
+      // Find paragraph elements that might contain tool calls
+      const paragraphs = latestMessage.querySelectorAll('.markdown p, .prose p, .markdown pre, .prose pre');
 
-      if (text.includes('[TOOL_CALL]') && text.includes('[/TOOL_CALL]')) {
-        // Extract all tool calls from this element
-        const toolCallMatches = Array.from(
-          text.matchAll(/\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/g) || []
-        );
 
-        // Check if any of them match our specific tool call
-        for (const match of toolCallMatches) {
-          if (match && match[1]) {
-            const toolCallContent = match[1].trim();
-
-            // Check if this is our target tool call
-            if (toolCallPattern && new RegExp(toolCallPattern, 'i').test(toolCallContent)) {
-              toolCallElement = element;
-              toolCallText = match[0]; // The full match including [TOOL_CALL] tags
-              break;
-            }
+      
+      // Iterate through each paragraph
+      for (let j = paragraphs.length - 1; j >= 0; j--) {
+        const para = paragraphs[j];
+        const text = para.textContent || '';
+        console.log('   - Looking for tool call:', toolCall.tool, 'in paragraph', j, 'with text:', text);
+        
+        // Check if paragraph contains tool call markers
+        if (text.includes('[TOOL_CALL]') && text.includes('[/TOOL_CALL]')) {
+          console.log('📡 Found potential tool call paragraph');
+          
+          // For WhatsApp or any other tool, simply check if the tool name is in the text
+          if (text.includes(`"tool": "${toolCall.tool}"`) || 
+              text.includes(`"tool":"${toolCall.tool}"`)) {
+            
+            console.log('📡 Found matching tool call:', toolCall.tool);
+            toolCallElement = para;
+            
+            // Extract the entire tool call text including the markers
+            const startIndex = text.indexOf('[TOOL_CALL]');
+            const endIndex = text.indexOf('[/TOOL_CALL]') + '[/TOOL_CALL]'.length;
+            toolCallText = text.substring(startIndex, endIndex);
+            return { toolCallElement, toolCallText };
+            break;
           }
         }
-
-        if (toolCallElement) break;
       }
     }
+
+    if (!toolCallElement) {
+      console.log('📡 Could not find tool call element for:', toolCall.tool);
+    } else {
+      console.log('📡 Successfully found tool call element for:', toolCall.tool);
+    }
+
     return { toolCallElement, toolCallText };
   }
 
@@ -720,8 +730,11 @@ class UIManager {
       const placeholderId = `tool-placeholder-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       const placeholder = `<div id="${placeholderId}"></div>`;
 
+      console.log('=== Replacing tool call text:', toolCallText);
+      console.log('=== Tool call element:', toolCallElement);
       // Replace only the specific tool call text with the placeholder
       const safeToolCallText = toolCallText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex special chars
+      console.log('=== Safe tool call text:', safeToolCallText);
       const newHTML = toolCallElement.innerHTML.replace(
         new RegExp(safeToolCallText, 'g'),
         placeholder
@@ -795,9 +808,14 @@ class UIManager {
       const paramsStr = this.formatParameters(toolCall.parameters);
       const resultMessage = `Tool result for ${toolCall.tool}${paramsStr}:  ${result}`;
 
-      // Enter the result into the message box and send it
+      // Enter the result into the message box and preserve newlines
       inputElement.focus();
-      inputElement.textContent = resultMessage;
+      
+      // Preserve newlines by using innerHTML with <br> tags
+      const formattedMessage = '<p>' + resultMessage.replace(/\n/g, '</p><p>') + '</p>';
+      console.log('📡 Formatted message:', formattedMessage);
+      inputElement.innerHTML = formattedMessage;
+      
       inputElement.dispatchEvent(new Event('input', { bubbles: true }));
 
       // Simulate pressing Enter to send the message
