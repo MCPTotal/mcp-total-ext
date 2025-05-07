@@ -17,7 +17,7 @@ A high-quality listing helps your extension get discovered and builds trust with
 
 ### Item Title
 
-- **Name**: "MCP for ChatGPT"
+- **Name**: "MCP Total Extension"
 - Keep it clear, concise, and descriptive
 - Accurately reflect the extension's core function
 - Avoid keyword stuffing or generic superlatives
@@ -41,37 +41,43 @@ Format your description with:
 - Information on how to get started
 
 ```
-MCP for ChatGPT seamlessly integrates Model Context Protocol (MCP) servers with the ChatGPT interface, allowing you to extend ChatGPT with custom AI tools and capabilities.
+MCP Total Extension seamlessly integrates Model Context Protocol (MCP) servers with the ChatGPT interface, allowing you to extend ChatGPT with custom AI tools and capabilities.
 
 ✨ WHAT IT DOES
-This extension lets you connect ChatGPT to your own MCP-compatible tools and services. Once connected, ChatGPT can use these tools directly in your conversations, enabling you to build and use custom AI capabilities beyond ChatGPT's built-in features.
+This extension lets you connect ChatGPT to any MCP-compatible tools and services. Once connected, ChatGPT can use these tools directly in your conversations, enabling you to build and use custom AI capabilities beyond ChatGPT's built-in features.
 
 🔑 KEY FEATURES
-• Connect to multiple MCP servers simultaneously
-• Automatically register tools from MCP servers with ChatGPT
-• Use your tools directly within ChatGPT conversations
-• Configure and manage servers easily through the browser UI
-• Works with the standard Model Context Protocol
+• Seamlessly integrate tools from MCP servers into ChatGPT
+• Review and edit tool responses before they're sent to ChatGPT
+• Configure SSE-based MCP servers with a simple keyboard shortcut (<Ctrl>+M)
+  • Stdio-based MCP servers could be adapted using mcp-proxy (https://github.com/sparfenyuk/mcp-proxy)
+• Ability to configure auto-run and auto-send modes
 
-💡 PERFECT FOR
-• Developers building custom AI tools
-• Teams wanting to extend ChatGPT with specialized capabilities
-• Anyone wanting to connect ChatGPT to their own data or services
-• Researchers exploring AI tool interoperability
+⚠️ CURRENT LIMITATIONS
+• Only tools are supported: Currently, only tool functionality is supported. Future versions will add support for other MCP features
+• Limited number of tools: Due to ChatGPT's customization system prompt limitations, only a limited number of tools can be registered at once
 
 🔒 PRIVACY & SECURITY
 • Your conversations stay private – we don't collect chat data
-• Only tool parameters are sent to your configured MCP servers
-• All server configurations are stored locally in your browser
+• Servers configurations are stored locally in your browser
+• Only tool call parameters are sent to your configured MCP servers
 • Minimal permissions required
 
 ⚙️ GETTING STARTED
 1. Install the extension
-2. Visit chat.openai.com
-3. Connect to an MCP server by opening the configuration UI
+2. Visit chatgpt.com
+3. Connect to an MCP server by opening the configuration UI (Ctrl+M)
 4. Start using MCP tools in your ChatGPT conversations
 
-For developers interested in creating MCP tools, visit the Model Context Protocol documentation to learn how to build compatible servers and tools.
+📱 CONNECT TO POPULAR SERVICES
+You can use WhatsApp directly from ChatGPT with the whatsapp-mcp server:
+1. Clone the repo: https://github.com/lharries/whatsapp-mcp
+2. Run the bridge (cd bridge && go run main.go) and scan the QR code
+3. Run the MCP server with proxy: cd whatsapp-mcp-server && uvx mcp-proxy --sse-port=8090 uv run main.py
+4. Connect the extension to http://localhost:8090/sse
+
+ℹ️ HOW IT WORKS
+The extension uses ChatGPT's customization feature (system prompt) to register MCP tools, which allows the AI to call these tools during conversations. Tool calls are handled by the extension and results are sent back to ChatGPT.
 
 This extension is not affiliated with OpenAI or ChatGPT.
 ```
@@ -93,6 +99,9 @@ This extension is not affiliated with OpenAI or ChatGPT.
   - Avoid screenshots or complex UI elements
   - Use appropriate colors that stand out
 
+### Video
+https://www.youtube.com/watch?v=97UxIhaFrG8
+
 ### Screenshots (Required, 1-5)
 
 - **Size**: 1280x800 or 640x400 pixels
@@ -106,7 +115,7 @@ This extension is not affiliated with OpenAI or ChatGPT.
   - Avoid overwhelming text in the screenshots
   - Consider adding captions to explain features
 
-- **Suggested screenshots for MCP for ChatGPT**:
+- **Suggested screenshots for MCP Total Extension**:
   1. The extension showing tools being registered in ChatGPT
   2. A conversation with ChatGPT where a tool is being used
   3. The server configuration UI
@@ -135,7 +144,7 @@ This extension is not affiliated with OpenAI or ChatGPT.
 
 - **Single Purpose Description** (1,000 chars max):
   ```
-  This extension connects ChatGPT to MCP (Model Context Protocol) servers, allowing users to use custom AI tools directly within ChatGPT conversations. It extends ChatGPT's capabilities by integrating external tools without leaving the chat interface.
+  This extension connects ChatGPT to MCP (Model Context Protocol) servers, allowing users to use custom AI tools directly within ChatGPT conversations. It works with any SSE-based MCP server and can also connect to stdio-based servers through mcp-proxy. It uses ChatGPT's customization feature (system prompt) to register tools, with the limitation that only a certain number of tools can be registered at once. It extends ChatGPT's capabilities by integrating external tools without leaving the chat interface.
   ```
 
 - **Website/Homepage URL**: Your project's GitHub page or documentation site
@@ -149,11 +158,6 @@ Clear permission justifications help your extension get approved faster:
 - **Host Permission Justification**:
   ```
   This extension requires host permissions to communicate with user-configured MCP servers (via *://*/*) and to intercept and modify requests to OpenAI's API (via https://api.openai.com/*) in order to register tools with ChatGPT and handle tool execution requests.
-  ```
-
-- **Remote Code Justification** (if "Yes, I am using remote code" is selected):
-  ```
-  The extension connects to user-configured MCP servers to discover and execute tools. These servers provide tool definitions and handle tool execution requests. The extension does not execute arbitrary code from these servers but rather processes structured tool definitions and executes tools through a sandboxed API.
   ```
 
 ## Data Usage Declaration

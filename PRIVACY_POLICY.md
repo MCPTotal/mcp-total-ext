@@ -1,10 +1,10 @@
-# Privacy Policy for MCP for ChatGPT
+# Privacy Policy for MCP Total Extension
 
-**Last Updated: April 30, 2023**
+**Last Updated: April 30, 2025**
 
 ## Overview
 
-MCP for ChatGPT ("the Extension") is a browser extension that helps users connect ChatGPT to their own backend tools using the Model Context Protocol (MCP). This Privacy Policy explains what information is used by the Extension and how it is handled.
+MCP Total Extension ("the Extension") is a browser extension that helps users connect ChatGPT to their own backend tools using the Model Context Protocol (MCP). This Privacy Policy explains what information is used by the Extension and how it is handled.
 
 ## Information Collection and Use
 
@@ -35,6 +35,7 @@ All configuration data is stored locally in your browser. It never leaves your d
 The Extension does not share data with third parties except:
 
 - **Your configured MCP servers**, which receive only the tool-specific parameters when you initiate a tool call
+- **ChatGPT** receives the response from the MCP server, if you choose to.
 
 ## Security
 
@@ -62,7 +63,7 @@ Any updates to this policy will be posted here, with the updated "Last Updated" 
 ## Contact
 
 For questions or concerns, please contact us at [info@piiano.com]  
-or open an issue at [https://github.com/piiano/mcp-chrome-ext](https://github.com/piiano/mcp-chrome-ext).
+or open an issue at [https://github.com/piiano/mcp-total-ext](https://github.com/piiano/mcp-total-ext).
 
 ## Consent
 

@@ -1,5 +1,5 @@
 {
-  "name": "MCP for ChatGPT",
+  "name": "MCP Total",
   "description": "Connect ChatGPT to your own AI tools using Model Context Protocol (MCP) – extend ChatGPT with custom capabilities",
   "version": "1.0.0",
   "manifest_version": 3,

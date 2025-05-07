@@ -4,25 +4,21 @@
 class ToolManager {
   // Static properties
   static CHAR_LIMIT = 1500; // Character limit per field for system messages
-  static TOOL_SECTION_START = '<!-- TOOLS_START -->';
-  static TOOL_SECTION_END = '<!-- TOOLS_END -->';
-  static SYSTEM_PROMPT = `I have access to several tools, I can run for you when needed and reply with the result.
-The tools are described in system prompt  between the '<!--TOOLS_START-->' and '<!--TOOLS_END-->' tags.
-When you need to use a tool, respond in this exact full format:
-"""
-[TOOL_CALL]
-{
-  "tool": "toolName",
-  "parameters": {
-    "param1": "value1"
-  }
-}
-[/TOOL_CALL]
-"""
-And I will run the tool and send you the result.
-IMPORTANT: You must! respond in this exact full format, including the [TOOL_CALL] and [/TOOL_CALL] tags!!!
-ALWAYS RESPOND WITH FULL TOOL CALL FORMAT!
-"""
+  static TOOL_SECTION_START = '<BEGIN_TOOLS>';
+  static TOOL_SECTION_END = '<END_TOOLS>';
+  static TOOL_PREFIX = "TOOL:"
+  static TOOL_PARAMS_PREFIX = "PARAMS:"
+  static SYSTEM_PROMPT = `I have access to several tools (as opposed to other tools you may already have), I can run for you when needed and reply with the result.
+The tools are described in system prompt between the 'BEGIN_TOOLS' and 'END_TOOLS' tags.
+
+To call a tool, reply to me with the following format:
+[TOOL_CALL]{"tool": "prefix-tool_name", "parameters": {"param1": "value1"}}[/TOOL_CALL].
+I'll run the tool and send you the result. DON'T try any other way to run the tool.
+
+*** IMPORTANT ***
+Always respond to me to use a tool, DON'T try to run the tool yourself!
+Always use the above format, including the TOOL_CALL tags and the tool name!!! I'll then send you the result of the call.
+DON'T try to run the tools yourself!
 `;
 
   constructor(uiManager) {
@@ -36,9 +32,6 @@ ALWAYS RESPOND WITH FULL TOOL CALL FORMAT!
     };
 
     this.toolDefinitions = [];
-
-    // Tool instruction for the system message with clear markers
-
 
     // Setup network interceptors
     this.setupNetworkInterceptors();
@@ -83,7 +76,6 @@ ALWAYS RESPOND WITH FULL TOOL CALL FORMAT!
     this.toolDefinitions = [];
     return this.registerTools(tools);
   }
-
 
   unregisterTool(name, shouldUpdateSystemSettings = true) {
     const initialLength = this.toolDefinitions.length;
@@ -171,7 +163,7 @@ ALWAYS RESPOND WITH FULL TOOL CALL FORMAT!
       const originalResponse = await originalFetch.apply(this, arguments);
 
       // Process chat responses to detect tool calls
-      if (typeof url === 'string' && url.includes('/backend-api/conversation')) {
+      if (typeof url === 'string' && url.includes('/backend-api/') && url.includes('conversation')) {
         const contentType = originalResponse.headers.get('content-type') || '';
 
         if (contentType.includes('text/event-stream')) {
@@ -573,9 +565,9 @@ ALWAYS RESPOND WITH FULL TOOL CALL FORMAT!
         params = Object.entries(tool.parameters)
           .map(([name, param]) => `\t* ${name}: ${param.description}`)
           .join('\n');
-        params = `\nPARAMS:\n${params}`;
+        params = `\n${ToolManager.TOOL_PARAMS_PREFIX}\n${params}`;
       }
-      return `TOOL: ${tool.name}: ${tool.description}${params}`;
+      return `${ToolManager.TOOL_PREFIX} ${tool.name}: ${tool.description}${params}`;
     });
   }
 

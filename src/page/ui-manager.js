@@ -806,7 +806,7 @@ class UIManager {
 
       // Format the result message with params included
       const paramsStr = this.formatParameters(toolCall.parameters);
-      const resultMessage = `Tool result for ${toolCall.tool}${paramsStr}:  ${result}`;
+      const resultMessage = `Tool result for ${toolCall.tool}${paramsStr}:\n${result}`;
 
       // Enter the result into the message box and preserve newlines
       inputElement.focus();

@@ -1,4 +1,4 @@
-# Contributing to MCP for ChatGPT
+# Contributing to MCP Total
 
 Thank you for considering contributing to this project! Here's how you can help:
 
@@ -25,8 +25,8 @@ Thank you for considering contributing to this project! Here's how you can help:
 
 ```sh
 # Clone the repository
-git clone https://github.com/piiano/mcp-chrome-ext.git
-cd mcp-chrome-ext
+git clone https://github.com/piiano/mcp-total-ext.git
+cd mcp-total-ext
 
 # Install dependencies
 npm install

@@ -1,5 +1,5 @@
 {
-  "name": "@piiano/mcp-chrome-ext",
+  "name": "@piiano/mcp-total-ext",
   "version": "1.0.0",
   "description": "Inject MCP tool definitions and handle tool calls when using ChatGPT in the browser",
   "private": true,

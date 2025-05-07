@@ -13,7 +13,7 @@ if (!fs.existsSync(distDir)) {
 }
 
 // Create output zip file
-const output = fs.createWriteStream(path.join(distDir, `mcp-for-chatgpt-v${version}.zip`));
+const output = fs.createWriteStream(path.join(distDir, `mcp-total-ext-v${version}.zip`));
 const archive = archiver('zip', {
   zlib: { level: 9 } // Maximum compression
 });
@@ -25,7 +25,7 @@ archive.on('error', (err) => {
 
 // Listen for all archive data to be written
 output.on('close', function() {
-  console.log(`Packaging complete: dist/mcp-for-chatgpt-v${version}.zip`);
+  console.log(`Packaging complete: dist/mcp-total-ext-v${version}.zip`);
   console.log(`Total size: ${archive.pointer()} bytes`);
 });
 
