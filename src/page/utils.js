@@ -3,10 +3,10 @@
 // ==============================
 
 // Send a message back to the content script
-function sendApiMonitorMessage(action, data) {
+function sendContentMessage(action, data) {
   window.postMessage(
     {
-      type: 'API_MONITOR',
+      type: 'CONTENT_MESSAGE',
       action: action,
       data: data,
     },
@@ -16,7 +16,7 @@ function sendApiMonitorMessage(action, data) {
 
 // Create the module exports
 const utils = {
-  sendApiMonitorMessage,
+  sendContentMessage,
 };
 
 /* eslint-disable no-undef */

@@ -94,7 +94,7 @@
         const McpManager = await importModule('src/page/mcp-manager.js');
 
         // Extract utility functions
-        const { sendApiMonitorMessage } = utils;
+        const { sendContentMessage } = utils;
         
         // Initialize and configure components
         await initializeComponents({
@@ -103,7 +103,7 @@
           McpUI,
           McpManager,
           PageMcpClient,
-          sendApiMonitorMessage
+          sendContentMessage
         });
 
         console.log('📡 DEBUG Monitor active - Source Modules Loaded');
@@ -118,7 +118,7 @@
     try {
       // Import modules
       const { PageMcpClient } = require('./page-client');
-      const { sendApiMonitorMessage } = require('./utils');
+      const { sendContentMessage } = require('./utils');
       const ToolManager = require('./tool-manager');
       const McpManager = require('./mcp-manager');
       const UIManager = require('./ui-manager');
@@ -131,7 +131,7 @@
         McpUI,
         McpManager,
         PageMcpClient,
-        sendApiMonitorMessage
+        sendContentMessage
       });
 
       console.log('📡 Production Monitor active - Modular Architecture');
@@ -148,7 +148,7 @@
       McpUI,
       McpManager,
       PageMcpClient,
-      sendApiMonitorMessage
+      sendContentMessage
     } = modules;
 
     // Initialize components
@@ -172,55 +172,12 @@
     window.addEventListener('message', function (event) {
       if (event.source !== window) return;
 
-      if (event.data && event.data.type === 'API_MONITOR_CHECK') {
-        sendApiMonitorMessage('LOADED', { timestamp: new Date().toISOString() });
+      if (event.data && event.data.type === 'MONITOR_MESSAGE') {
+        sendContentMessage('LOADED', { timestamp: new Date().toISOString() });
       }
     });
 
-    // Expose public API to window
-    window.sendManualToolResult = function (toolName, result) {
-      if (!toolManager.state.lastToolCall) {
-        console.error('📡 No tool call information available');
-        return;
-      }
-
-      const toolCall = {
-        tool: toolName || toolManager.state.lastToolCall.toolName,
-        parameters: toolManager.state.lastToolCall.parameters,
-      };
-
-      uiManager.sendToolResult(toolCall, result || toolManager.state.lastToolCall.result);
-    };
-
-    window.configureTools = () => toolManager.updateSystemSettingsWithTools();
-
-    window.addNewTool = function (name, description, parameters = {}, callback) {
-      return toolManager.registerTool(name, description, parameters, callback);
-    };
-
-    window.removeTool = function (name) {
-      return toolManager.unregisterTool(name);
-    };
-
-    window.getExtractedParameters = function () {
-      return (
-        toolManager.state.extractedParameters ||
-        toolManager.state.lastToolCall?.extractedParameters ||
-        {}
-      );
-    };
-
-    // Helper for manual testing
-    window.openMcpConfig = () => mcpManager.showServerConfigUI();
-
-    // MCP server management API
-    window.addMcpServer = config => mcpManager.addServer(config);
-    window.removeMcpServer = id => mcpManager.removeServer(id);
-    window.setMcpServerStatus = (id, enabled) => mcpManager.setServerStatus(id, enabled);
-    window.getMcpServers = () => mcpManager.getServers();
-    window.fetchMcpToolDefinitions = () => mcpManager.fetchToolsDefinitions();
-
     // Send startup message
-    sendApiMonitorMessage('MONITOR_STARTED', { version: '1.0.0' });
+    sendContentMessage('MONITOR_STARTED', { version: '1.0.0' });
   }
 })(); 

@@ -1,4 +1,4 @@
-# Contributing to MCP Total
+# Contributing to MCPTotal
 
 Thank you for considering contributing to this project! Here's how you can help:
 

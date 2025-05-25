@@ -308,65 +308,6 @@ class UIManager {
     });
   }
 
-  getToolCallElement(toolCall) {
-    // Find all assistant message containers
-    const messageContainers = document.querySelectorAll('[data-message-author-role="assistant"]');
-    if (messageContainers.length === 0) {
-      console.log('📡 No message containers found');
-      return {};
-    }
-
-    // Start with the most recent message first
-    // Iterate through message containers from newest to oldest
-    let toolCallElement = null;
-    let toolCallText = '';
-
-    for (let i = messageContainers.length - 1; i >= 0 && i > messageContainers.length - 5; i--) {
-      const latestMessage = messageContainers[i];
-      console.log('* Looking for tool call:', toolCall.tool, 'in message', i);
-
-      // Find paragraph elements that might contain tool calls
-      const paragraphs = latestMessage.querySelectorAll('.markdown p, .prose p, .markdown pre, .prose pre');
-
-
-      
-      // Iterate through each paragraph
-      for (let j = paragraphs.length - 1; j >= 0; j--) {
-        const para = paragraphs[j];
-        const text = para.textContent || '';
-        console.log('   - Looking for tool call:', toolCall.tool, 'in paragraph', j, 'with text:', text);
-        
-        // Check if paragraph contains tool call markers
-        if (text.includes('[TOOL_CALL]') && text.includes('[/TOOL_CALL]')) {
-          console.log('📡 Found potential tool call paragraph');
-          
-          // For WhatsApp or any other tool, simply check if the tool name is in the text
-          if (text.includes(`"tool": "${toolCall.tool}"`) || 
-              text.includes(`"tool":"${toolCall.tool}"`)) {
-            
-            console.log('📡 Found matching tool call:', toolCall.tool);
-            toolCallElement = para;
-            
-            // Extract the entire tool call text including the markers
-            const startIndex = text.indexOf('[TOOL_CALL]');
-            const endIndex = text.indexOf('[/TOOL_CALL]') + '[/TOOL_CALL]'.length;
-            toolCallText = text.substring(startIndex, endIndex);
-            return { toolCallElement, toolCallText };
-            break;
-          }
-        }
-      }
-    }
-
-    if (!toolCallElement) {
-      console.log('📡 Could not find tool call element for:', toolCall.tool);
-    } else {
-      console.log('📡 Successfully found tool call element for:', toolCall.tool);
-    }
-
-    return { toolCallElement, toolCallText };
-  }
-
   // Execute the tool and update UI accordingly
   async executeToolAndUpdateUI(
     toolCall,
@@ -453,8 +394,7 @@ class UIManager {
     }
   }
 
-  drawToolResultButton(toolCall, executeToolCall) {
-    const { toolCallElement, toolCallText } = this.getToolCallElement(toolCall);
+  drawToolResultButton(toolCall, executeToolCall, toolCallText, toolCallElement) {
 
     if (!toolCallElement) {
       console.log('📡 Could not find tool call text element');
@@ -785,10 +725,10 @@ class UIManager {
   }
 
   // Inject a button into the UI to send the tool result
-  injectToolResultButton(toolCall, executeToolCall) {
+  injectToolResultButton(toolCall, executeToolCall, toolCallText, element) {
     try {
       console.log(`📡 Injecting button for tool: ${toolCall.tool}`);
-      this.drawToolResultButton(toolCall, executeToolCall);
+      this.drawToolResultButton(toolCall, executeToolCall, toolCallText, element);
     } catch (e) {
       console.error('📡 Error injecting button:', e);
     }

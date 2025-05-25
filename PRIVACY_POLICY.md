@@ -1,10 +1,10 @@
-# Privacy Policy for MCP Total Extension
+# Privacy Policy for MCPTotal Extension
 
 **Last Updated: April 30, 2025**
 
 ## Overview
 
-MCP Total Extension ("the Extension") is a browser extension that helps users connect ChatGPT to their own backend tools using the Model Context Protocol (MCP). This Privacy Policy explains what information is used by the Extension and how it is handled.
+MCPTotal Extension ("the Extension") is a browser extension that helps users connect ChatGPT to their own backend tools using the Model Context Protocol (MCP). This Privacy Policy explains what information is used by the Extension and how it is handled.
 
 ## Information Collection and Use
 

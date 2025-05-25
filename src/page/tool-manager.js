@@ -3,41 +3,46 @@
 // ==============================
 class ToolManager {
   // Static properties
-  static CHAR_LIMIT = 1500; // Character limit per field for system messages
-  static TOOL_SECTION_START = '<BEGIN_TOOLS>';
-  static TOOL_SECTION_END = '<END_TOOLS>';
   static TOOL_PREFIX = "TOOL:"
   static TOOL_PARAMS_PREFIX = "PARAMS:"
-  static SYSTEM_PROMPT = `I have access to several tools (as opposed to other tools you may already have), I can run for you when needed and reply with the result.
-The tools are described in system prompt between the 'BEGIN_TOOLS' and 'END_TOOLS' tags.
-
+  static SYSTEM_PROMPT_SEPARATOR = '\n\n===INSTRUCTIONS===\n\n'; // Add separator constant
+  static SYSTEM_PROMPT = `I have access to several tools, I can run for you when needed and reply with the result.
 To call a tool, reply to me with the following format:
 [TOOL_CALL]{"tool": "prefix-tool_name", "parameters": {"param1": "value1"}}[/TOOL_CALL].
-I'll run the tool and send you the result. DON'T try any other way to run the tool.
+I'll run the tool and send you the result.
 
-*** IMPORTANT ***
-Always respond to me to use a tool, DON'T try to run the tool yourself!
-Always use the above format, including the TOOL_CALL tags and the tool name!!! I'll then send you the result of the call.
-DON'T try to run the tools yourself!
+The tools are described below.
+
+For any prompt you get, check if tools could be useful, and plan a strategy to use them, then reply to me to run them one by one according to your plan.
+
+** IMPORTANT **
+Always respond to me to use a tool, DON'T try to run the tool yourself e.g. in python code!
+Always use the above format, including the TOOL_CALL tags and the tool name.
+
+
+** TOOLS:
 `;
 
   constructor(uiManager) {
     this.uiManager = uiManager;
     this.state = {
-      authToken: null,
-      lastConversationId: null,
-      lastToolCall: null,
-      extractedParameters: {},
-      lastMessageData: null,
+      authToken: null
     };
 
     this.toolDefinitions = [];
+    this.toolsDefinitionChanged = false;
+    
+    // Track processed nodes to avoid duplication
+    this.processedNodes = new WeakMap();
 
     // Setup network interceptors
     this.setupNetworkInterceptors();
+    
+    // Setup tool call detection via MutationObserver
+    this.setupToolCallDetection();
   }
 
-  registerTool(name, description, parameters, callback, shouldUpdateSystemSettings = true) {
+  registerTool(name, description, parameters, callback) {
     // Check if tool already exists
     const existingIndex = this.toolDefinitions.findIndex(tool => tool.name === name);
 
@@ -58,47 +63,47 @@ DON'T try to run the tools yourself!
 
     console.log(`📡 Registered tool: ${name}`);
 
-    if (shouldUpdateSystemSettings) {
-      this.updateSystemSettingsWithTools();
-    }
-
     return toolDefinition;
   }
   
-  registerTools(tools) {
-    for (const tool of tools) {
-      this.registerTool(tool.name, tool.description, tool.parameters, tool.callback, false);
-    }
-    return this.updateSystemSettingsWithTools();
-  }
-
   updateTools(tools) {
-    this.toolDefinitions = [];
-    return this.registerTools(tools);
-  }
-
-  unregisterTool(name, shouldUpdateSystemSettings = true) {
-    const initialLength = this.toolDefinitions.length;
-    this.toolDefinitions = this.toolDefinitions.filter(tool => tool.name !== name);
-
-    if (this.toolDefinitions.length < initialLength) {
-      console.log(`📡 Unregistered tool: ${name}`);
-
-      if (shouldUpdateSystemSettings) {
-        this.updateSystemSettingsWithTools();
+    // Simple check to avoid updates if nothing changed
+    if (tools.length === this.toolDefinitions.length) {
+      // Check if all tools match
+      let allMatch = true;
+      
+      for (let i = 0; i < tools.length; i++) {
+        const newTool = tools[i];
+        // Try to find a matching tool in current definitions
+        const existingTool = this.toolDefinitions.find(t => t.name === newTool.name);
+        
+        // If no matching tool or properties differ, tools have changed
+        if (!existingTool || 
+            existingTool.description !== newTool.description || 
+            JSON.stringify(existingTool.parameters || {}) !== JSON.stringify(newTool.parameters || {})) {
+          allMatch = false;
+          break;
+        }
       }
-      return true;
+      
+      if (allMatch) {
+        console.log('📡 Tools list unchanged, skipping update');
+        return true;
+      }
     }
-
-    return false;
+    
+    // If different, update with the new tools
+    console.log('📡 Updating tools with new list');
+    this.toolDefinitions = [];
+    for (const tool of tools) {
+      this.registerTool(tool.name, tool.description, tool.parameters, tool.callback);
+    }
+    this.toolsDefinitionChanged = true;
+    return true;
   }
 
   getToolByName(name) {
     return this.toolDefinitions.find(tool => tool.name === name);
-  }
-
-  isValidTool(toolName) {
-    return this.toolDefinitions.some(tool => tool.name === toolName);
   }
 
   executeToolCall(toolName, parameters) {
@@ -117,446 +122,373 @@ DON'T try to run the tools yourself!
     return `Error: Unknown tool '${toolName}'`;
   }
 
+  // Process tool calls from text chunks
+  processToolCalls(text) {
+    const toolCalls = [];
+    let startIndex = 0;
+    
+    while (true) {
+      const start = text.indexOf('[TOOL_CALL]', startIndex);
+      if (start === -1) break;
+      
+      const end = text.indexOf('[/TOOL_CALL]', start);
+      if (end === -1) break;
+      
+      const toolCallText = text.slice(start + '[TOOL_CALL]'.length, end);
+      try {
+        const toolCall = JSON.parse(toolCallText);
+        if (toolCall.tool) {
+          toolCalls.push({
+            tool: toolCall.tool,
+            parameters: toolCall.parameters || {},
+            execute: () => this.executeToolCall(toolCall.tool, toolCall.parameters),
+            toolCallText: text.slice(start, end + '[/TOOL_CALL]'.length)
+          });
+          }
+        } catch (e) {
+        console.error('📡 Error parsing tool call:', e);
+      }
+      
+      startIndex = end + '[/TOOL_CALL]'.length;
+    }
+    
+    if (toolCalls.length === 0) {
+      console.log('📡 !! No tool calls found in text:', text);
+    }
+    return toolCalls;
+  }
+
+  setupToolCallDetection() {
+    console.log('📡 Setting up MutationObserver for tool call detection');
+    
+    // Function to process a node and its children
+    const processNode = (node) => {
+      // Skip if already processed
+      if (this.hasProcessedNode(node)) {
+        return false; // Return false to indicate nothing was processed
+      }
+      
+      let wasProcessed = false; // Track if any child or this node was processed
+      
+      // Process children first (bottom-up approach)
+      if (node.nodeType === Node.ELEMENT_NODE && node.childNodes.length > 0) {
+        // Process all child nodes first
+        for (const childNode of node.childNodes) {
+          const childProcessed = processNode(childNode);
+          if (childProcessed) {
+            wasProcessed = true;
+          }
+        }
+        
+        // If any children were processed, mark this node as processed and return
+        if (wasProcessed) {
+          this.markNodeAsProcessed(node, 'child-processed');
+          return true;
+        }
+      }
+      
+      // Check if this node contains a tool call (only if no children were processed)
+      const content = node.nodeType === Node.TEXT_NODE ? node.textContent : node.innerText || node.textContent || '';
+      
+      if (content && content.includes('[TOOL_CALL]') && content.includes('[/TOOL_CALL]')) {
+        // Only process if this is the most specific element with the tool call
+        // (not already processed)
+        if (node.nodeType === Node.TEXT_NODE) {
+          console.log('📡 Found tool call in text node:', {
+            content: content.substring(0, 100) + (content.length > 100 ? '...' : ''),
+            node: node,
+            parentElement: node.parentElement
+          });
+        } else {
+          console.log('📡 Found tool call in element:', {
+            element: node,
+            tagName: node.tagName,
+            classList: node.classList ? Array.from(node.classList) : [],
+            content: content.substring(0, 100) + (content.length > 100 ? '...' : '')
+          });
+        }
+        
+        // Process the content for tool calls
+        const toolCalls = this.processToolCalls(content);
+        if (toolCalls.length > 0) {
+          console.log('📡 Processing tool call in specific node:', toolCalls);
+          
+          // Find the best container for UI injection
+          let targetElement = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+          
+          // Inject UI
+          requestAnimationFrame(() => {
+            toolCalls.forEach(toolCall => {
+              this.uiManager.injectToolResultButton(toolCall, toolCall.execute, toolCall.toolCallText, targetElement);
+            });
+          });
+          
+          // Mark node as processed
+          this.markNodeAsProcessed(node, content);
+          
+          // Mark all parent nodes to prevent duplicate processing
+          let parent = node.parentElement;
+          while (parent) {
+            this.markNodeAsProcessed(parent, 'child-processed');
+            parent = parent.parentElement;
+          }
+          
+          return true; // Indicate this branch was processed
+        }
+      }
+      
+      return wasProcessed; // Return whether processing occurred
+    };
+    
+    // Create a simple single observer that looks for new assistant messages
+    this.observer = new MutationObserver((mutations) => {
+      // Track nodes to process with delay
+      const nodesToProcess = new Set();
+      
+      for (const mutation of mutations) {
+        // Handle text content changes - we need to unmark previously processed nodes
+        if (mutation.type === 'characterData') {
+
+          const clearProcessedStatus = (node) => {
+            // Clear from this node
+            if (this.processedNodes.has(node)) {
+              //console.log('📡 Clearing processed status for:', node);
+              this.processedNodes.delete(node);
+            }
+            
+            // Recursively clear from children
+            if (node.childNodes) {
+              for (const child of node.childNodes) {
+                clearProcessedStatus(child);
+              }
+            }
+          };
+
+           // Find the closest user message ancestor
+          let userMessage = mutation.target;
+          while (userMessage && 
+                (!userMessage.getAttribute || 
+                  userMessage.getAttribute('data-message-author-role') !== 'user')) {
+            userMessage = userMessage.parentElement;
+          }
+
+          if (userMessage) {
+            clearProcessedStatus(userMessage);
+            this.hideSystemPromptInUserMessage(userMessage);
+          }
+          
+          // Find the closest assistant message ancestor
+          let assistantMessage = mutation.target;
+          while (assistantMessage && 
+                 (!assistantMessage.getAttribute || 
+                  assistantMessage.getAttribute('data-message-author-role') !== 'assistant')) {
+            assistantMessage = assistantMessage.parentElement;
+          }
+          
+          // If we found an assistant message, clear processed status of all nodes within it
+          if (assistantMessage) {
+            //console.log('📡 Clearing processed status for updated assistant message:', assistantMessage);            
+            // Clear processed status from the assistant message and all its descendants            
+            clearProcessedStatus(assistantMessage);
+            // Queue for delayed processing
+            nodesToProcess.add(assistantMessage);
+          }
+        }
+        
+        // Handle new nodes
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+          for (const node of mutation.addedNodes) {
+
+            if (node.getAttribute && node.getAttribute('data-message-author-role') === 'user') {
+              //console.log('📡 New user message found in node!', node);
+            }
+            // Process only element nodes
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              // If this is an assistant message, queue it for delayed processing
+              if (node.getAttribute && node.getAttribute('data-message-author-role') === 'assistant') {
+                //console.log('📡 New assistant message found, queueing for processing:', node);
+                nodesToProcess.add(node);
+              }
+              
+              // If this is a user message, check if it contains our system prompt and hide it
+              if (node.getAttribute && node.getAttribute('data-message-author-role') === 'user') {
+                // Use a short delay to ensure content is fully rendered
+                setTimeout(() => this.hideSystemPromptInUserMessage(node), 100);
+              }
+              
+              // Check for messages within added nodes
+              if (node.querySelectorAll) {
+                // Look for assistant messages
+                const assistantMessages = node.querySelectorAll('[data-message-author-role="assistant"]');
+                if (assistantMessages.length > 0) {
+                  // console.log(`📡 Found ${assistantMessages.length} assistant messages within added node`);
+                  assistantMessages.forEach(message => {
+                    nodesToProcess.add(message);
+                  });
+                }
+                
+                // Look for user messages that might contain system prompts
+                const userMessages = node.querySelectorAll('[data-message-author-role="user"]');
+                // console.log('📡 Found', userMessages.length, 'user messages within added node');
+                if (userMessages.length > 0) {
+                  userMessages.forEach(message => {
+                    setTimeout(() => this.hideSystemPromptInUserMessage(message), 100);
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      // Process queued nodes after a small delay
+      if (nodesToProcess.size > 0) {
+        // Clear any existing timeout
+        if (this.processingTimeout) {
+          clearTimeout(this.processingTimeout);
+        }
+        
+        // Set a new timeout to process nodes after a delay
+        this.processingTimeout = setTimeout(() => {
+          //console.log('📡 Processing queued nodes after delay:', nodesToProcess.size);
+          nodesToProcess.forEach(node => processNode(node));
+        }, 100); // 100ms delay to ensure content is populated and to reduce cycles
+      }
+    });
+    
+    // Function to safely start the observer
+    const startObserver = () => {
+      // Check if we have access to the document
+      if (typeof document === 'undefined') {
+        console.log('📡 Document not available yet, will try again in 500ms');
+        setTimeout(startObserver, 500);
+        return;
+      }
+      
+      // Find the main container (preferably main, but fall back to body if needed)
+      const targetNode = document.body || document.documentElement;
+      if (!targetNode) {
+        console.log('📡 No valid target node found, will try again in 500ms');
+        setTimeout(startObserver, 500);
+        return;
+      }
+      
+      try {
+        // Process any existing assistant messages first
+        const existingMessages = targetNode.querySelectorAll('[data-message-author-role="assistant"]');
+        console.log(`📡 Found ${existingMessages.length} existing assistant messages`);
+        existingMessages.forEach(message => processNode(message));
+        const existingUserMessages = targetNode.querySelectorAll('[data-message-author-role="user"]');
+        console.log(`📡 Found ${existingUserMessages.length} existing user messages`);
+        existingUserMessages.forEach(message => processNode(message));
+        
+        // Then start observing for new ones
+        this.observer.observe(targetNode, {
+          childList: true,
+          subtree: true,
+          characterData: true
+        });
+        
+        console.log(`📡 Observer installed on ${targetNode.nodeName || 'unknown'} - watching for new assistant messages`);
+      } catch (error) {
+        console.error('📡 Error setting up observer:', error);
+      }
+    };
+    
+    // Start the observer safely
+    startObserver();
+  }
+
   setupNetworkInterceptors() {
     const originalFetch = window.fetch;
     const self = this;
-
-    window.fetch = async function () {
+    
+    window.fetch = async function() {
       const url = arguments[0]?.url || arguments[0];
       const options = arguments[1] || {};
-
+      
       // Store auth token when we see it in a request
       if (options.headers) {
-        // Try different possible auth header formats
         const authHeader =
           options.headers.authorization ||
           options.headers.Authorization ||
           options.headers['authorization'] ||
           options.headers['Authorization'];
 
-        if (authHeader) {
-          if (self.state.authToken != authHeader) {
-            self.state.authToken = authHeader;
-            console.log('📡 Captured auth token, attempting to configure tools...');
-            setTimeout(() => self.updateSystemSettingsWithTools(), 1000);
-          }
+        if (authHeader && self.state.authToken !== authHeader) {
+          self.state.authToken = authHeader;
+          console.log('📡 Captured auth token');
         }
       }
-
-      // Capture conversation ID from requests
-      if (options.body && typeof url === 'string' && url.includes('/backend-api/conversation')) {
+      
+      // Check if this is a message creation request to append the system prompt
+      if (url.includes('/backend-api/conversation') && options.method === 'POST' && options.body) {
         try {
-          const parsedBody = JSON.parse(options.body);
-          if (
-            parsedBody.conversation_id &&
-            parsedBody.conversation_id !== self.state.lastConversationId
-          ) {
-            self.state.lastConversationId = parsedBody.conversation_id;
-            console.log('📡 Captured conversation ID:', self.state.lastConversationId);
+          // Parse the request body
+          const bodyData = JSON.parse(options.body);
+          
+          // Check if this is a message creation request with content
+          if (bodyData.messages && bodyData.messages.length > 0) {
+            // Check if this might be the first message in a conversation
+            const isFirstMessage = self.isFirstUserMessage();
+            const hasExplicitToken = bodyData.messages.some(msg => 
+              msg.author?.role === 'user' && 
+              msg.content?.parts?.[0]?.includes("MCPT")
+            );
+            
+            // Inject system prompt if this is the first message or has explicit token
+            if (self.toolsDefinitionChanged || isFirstMessage || hasExplicitToken) {
+              // Generate system prompt with tools
+              const toolsDefinitions = self.getToolsDefinitions();
+              const systemPrompt = [ToolManager.SYSTEM_PROMPT, ...toolsDefinitions].join('\n\n');
+              
+              // Find the first user message
+              const firstMessage = bodyData.messages.find(msg => msg.author.role === 'user');
+              if (firstMessage) {
+                console.log('📡 Appending system prompt to user message ' + 
+                           (isFirstMessage ? '(first in conversation)' : '(has MCPT token)'));
+                
+                // Append our system prompt to the end of the user message
+                // Remove MCPT token if present
+                const userContent = firstMessage.content.parts[0].replace("MCPT", "").trim();
+                firstMessage.content.parts[0] = userContent + ToolManager.SYSTEM_PROMPT_SEPARATOR + systemPrompt;
+                
+                // Update the request body
+                options.body = JSON.stringify(bodyData);
+                
+                // Set flag to prevent multiple injections
+                self.toolsDefinitionChanged = false;
+              }
+            }
           }
         } catch (e) {
-          // Ignore parsing errors
+          console.error('📡 Error attempting to inject system prompt:', e);
         }
       }
 
-      // Make the original request
-      const originalResponse = await originalFetch.apply(this, arguments);
-
-      // Process chat responses to detect tool calls
-      if (typeof url === 'string' && url.includes('/backend-api/') && url.includes('conversation')) {
-        const contentType = originalResponse.headers.get('content-type') || '';
-
-        if (contentType.includes('text/event-stream')) {
-          // Clone the response to process it
-          const clonedResponse = originalResponse.clone();
-
-          // Create a transform stream to pass through the original response
-          const { readable, writable } = new TransformStream();
-          const newResponse = new Response(readable, originalResponse);
-
-          // Process the stream in the background - properly await the promise
-          self
-            .processStreamForToolCalls(clonedResponse.body, writable)
-            .then(toolCalls => {
-              if (toolCalls && toolCalls.length > 0) {
-                // Inject the tool call UI for each detected tool call
-                for (const toolCall of toolCalls) {
-                  self.uiManager.injectToolResultButton(toolCall, toolCall.execute);
-                }
-              }
-            })
-            .catch(error => {
-              console.error('📡 Error processing tool calls:', error);
-            });
-
-          return newResponse;
-        }
-      }
-
-      return originalResponse;
+      // Make the original request and return it
+      return originalFetch.apply(this, arguments);
     };
   }
-
-  async processStreamForToolCalls(inputStream, outputWriter) {
-    const reader = inputStream.getReader();
-    const writer = outputWriter.getWriter();
-    const decoder = new TextDecoder();
-
-    let buffer = '';
-    let messageId = '';
-    let content = '';
-    let chunk = '';
-
+  
+  // Helper method to determine if this is likely the first user message in a conversation
+  isFirstUserMessage() {
     try {
-      let isDone = false;
-      while (false === isDone) {
-        const { done, value } = await reader.read();
-        isDone = done;
-
-        // Pass through the chunk to the original consumer
-        if (value) {
-          await writer.write(value);
-          chunk = decoder.decode(value, { stream: true });
-          buffer += chunk;
-        }
-
-        if (done) {
-          console.log('📡 Stream complete, processing accumulated content');
-
-          // Process the complete accumulated content
-          const contentResult = this.getContentFromChunks(buffer);
-          content = contentResult.content;
-
-          // Use extracted metadata from contentResult
-          if (contentResult.conversation_id) {
-            this.state.lastConversationId = contentResult.conversation_id;
-            console.log('📡 Captured conversation ID:', this.state.lastConversationId);
-          }
-
-          if (contentResult.message_id && contentResult.message_id !== messageId) {
-            messageId = contentResult.message_id;
-            console.log('📡 Captured message ID:', messageId);
-          }
-
-          console.log('📡 Extracted message data:', {
-            conversation_id: contentResult.conversation_id,
-            message_id: contentResult.message_id,
-            status: contentResult.status,
-            end_turn: contentResult.end_turn,
-            model: contentResult.model,
-          });
-
-          // Store the full result in state for later access
-          this.state.lastMessageData = contentResult;
-
-          // Check for tool calls in the content
-          const toolCalls = this.detectCustomToolCall(content, messageId);
-          if (toolCalls.length > 0) {
-            console.log(`📡 Detected ${toolCalls.length} tool calls`);
-
-            // Bind 'this' to executeToolCall to ensure the proper context
-            const boundExecuteToolCall = this.executeToolCall.bind(this);
-
-            // Return the detected tool calls for processing
-            return toolCalls.map(toolCall => {
-              // Add the bound callback to each tool call
-              toolCall.execute = () =>
-                boundExecuteToolCall(toolCall.tool, toolCall.parameters);
-              return toolCall;
-            });
-          }
-        }
-      }
+      // Check how many user messages are in the DOM
+      const userMessages = document.querySelectorAll('[data-message-author-role="user"]');
+      const messageCount = userMessages.length;
+      
+      // If 0 messages exist, this is definitely the first message
+      // If 1 message exists, it's likely this is that message being sent
+      const isFirst = messageCount <= 1;
+      
+      console.log(`📡 User message count in DOM: ${messageCount}, treating as ${isFirst ? 'first' : 'subsequent'} message`);
+      return isFirst;
     } catch (e) {
-      console.error('📡 Error processing stream:', e);
-    } finally {
-      await writer.close();
-    }
-
-    return null;
-  }
-
-  // Extract message content and metadata from chunks
-  getContentFromChunks(buffer) {
-    if (!buffer) return { content: '' };
-
-    const result = {
-      content: '',
-      conversation_id: null,
-      message_id: null,
-      status: null,
-      end_turn: null,
-      model: null,
-      metadata: {},
-      raw_events: [],
-    };
-
-    try {
-      // Split the buffer into events (separated by double newlines)
-      const events = buffer.split('\n\n').filter(e => e.trim());
-
-      // Store raw events for debugging
-      result.raw_events = events.map(e => e.trim());
-      console.log(`📡 Processing ${events.length} events`, events);
-
-      // Track variant counters to detect multiple parallel responses
-      let hasMultipleVariants = false;
-      let lastVariantIndex = -1;
-
-      // Process each event
-      for (const event of events) {
-        // Skip empty events
-        if (!event.trim()) continue;
-
-        // Check for variant information
-        if (event.includes('"num_variants_in_stream"')) {
-          try {
-            const dataMatch = event.match(/^data: (.+)$/m);
-            if (dataMatch) {
-              const variantData = JSON.parse(dataMatch[1]);
-              if (variantData.num_variants_in_stream > 1) {
-                console.log(`📡 Detected ${variantData.num_variants_in_stream} variants in stream`);
-                hasMultipleVariants = true;
-              }
-            }
-          } catch (e) {
-            console.log('📡 Error parsing variant data:', e);
-          }
-          continue;
-        }
-
-        // Determine event type
-        const eventTypeMatch = event.match(/^event: (.+)$/m);
-        const eventType = eventTypeMatch ? eventTypeMatch[1].trim() : null;
-
-        // Extract data payload
-        const dataMatch = event.match(/^data: (.+)$/m);
-        if (!dataMatch) continue;
-
-        const dataStr = dataMatch[1].trim();
-        if (dataStr === '[DONE]') continue; // End marker
-
-        try {
-          // Parse data as JSON
-          const data = JSON.parse(dataStr);
-
-          // Check for variant index
-          if (data.c !== undefined) {
-            const variantIndex = parseInt(data.c);
-
-            // Only process one variant (the first complete one we see)
-            if (lastVariantIndex === -1) {
-              lastVariantIndex = variantIndex;
-            } else if (hasMultipleVariants && variantIndex !== lastVariantIndex) {
-              // Skip events from other variants
-              continue;
-            }
-          }
-
-          // Process based on event type
-          switch (eventType) {
-            case 'delta_encoding':
-              // Just a version marker, nothing to extract
-              break;
-
-            case 'delta':
-              // Handle different types of delta events
-              if (data.p === '' && data.o === 'add' && data.v) {
-                // Initial message event
-                if (data.v.message) {
-                  if (data.v.message.id) {
-                    result.message_id = data.v.message.id;
-                  }
-
-                  if (data.v.message.status) {
-                    result.status = data.v.message.status;
-                  }
-
-                  if (data.v.message.end_turn !== undefined) {
-                    result.end_turn = data.v.message.end_turn;
-                  }
-
-                  if (data.v.message.metadata) {
-                    result.metadata = { ...result.metadata, ...data.v.message.metadata };
-                    if (data.v.message.metadata.model_slug) {
-                      result.model = data.v.message.metadata.model_slug;
-                    }
-                  }
-
-                  // Initial content if any
-                  if (data.v.message.content && data.v.message.content.parts) {
-                    result.content = data.v.message.content.parts[0] || '';
-                  }
-                }
-
-                // Extract conversation ID
-                if (data.v.conversation_id) {
-                  result.conversation_id = data.v.conversation_id;
-                }
-              } else if (
-                data.p === '/message/content/parts/0' &&
-                data.o === 'append' &&
-                typeof data.v === 'string'
-              ) {
-                // Content append with explicit path
-                result.content += data.v;
-              } else if (data.v && typeof data.v === 'string' && !data.p) {
-                // Content append without path (simplified delta)
-                result.content += data.v;
-              } else if (data.o === 'patch' && Array.isArray(data.v)) {
-                // Process patch array
-                for (const patch of data.v) {
-                  if (
-                    patch.p === '/message/content/parts/0' &&
-                    patch.o === 'append' &&
-                    typeof patch.v === 'string'
-                  ) {
-                    result.content += patch.v;
-                  } else if (patch.p === '/message/status' && patch.o === 'replace') {
-                    result.status = patch.v;
-                  } else if (patch.p === '/message/end_turn' && patch.o === 'replace') {
-                    result.end_turn = patch.v;
-                  } else if (patch.p === '/message/metadata' && patch.o === 'append') {
-                    result.metadata = { ...result.metadata, ...patch.v };
-                  }
-                }
-              }
-              break;
-
-            default:
-              // Handle non-delta events
-              if (data.type === 'message_stream_complete' && data.conversation_id) {
-                result.conversation_id = data.conversation_id;
-              } else if (data.type === 'conversation_detail_metadata') {
-                if (data.conversation_id) {
-                  result.conversation_id = data.conversation_id;
-                }
-                if (data.default_model_slug) {
-                  result.model = data.default_model_slug;
-                }
-              } else if (data.type === 'title_generation' && data.title) {
-                result.title = data.title;
-              }
-              break;
-          }
-        } catch (e) {
-          // Handle non-JSON data
-          console.log('📡 Non-JSON data in event:', dataStr);
-        }
-      }
-
-      // Log final content for debugging
-      console.log(
-        `📡 Final content (${result.content.length} chars): "${result.content.substring(0, 50)}..."`,
-        result
-      );
-
-      return result;
-    } catch (e) {
-      console.error('📡 Error extracting content from chunks:', e);
-      return { content: result.content || '', raw_events: result.raw_events };
+      console.error('📡 Error checking message count:', e);
+      return false; // Default to false on error
     }
   }
-
-  // Detect custom tool calls in message content
-  detectCustomToolCall(content, messageId) {
-    if (!content) return [];
-
-    try {
-      const toolCalls = [];
-
-      // Look for custom tool call syntax with [TOOL_CALL] format - multiple occurrences
-      const toolCallMatches = Array.from(
-        content.matchAll(/\[TOOL_CALL\]([\s\S]*?)\[\/TOOL_CALL\]/g) || []
-      );
-
-      for (const match of toolCallMatches) {
-        if (match && match[1]) {
-          const toolCallContent = match[1].trim();
-
-          try {
-            // Try parsing as JSON
-            let toolCallJson;
-
-            // First, try parsing as-is
-            try {
-              toolCallJson = JSON.parse(toolCallContent);
-            } catch (parseError) {
-              // If it fails, try to fix common JSON syntax issues
-              const fixedContent = toolCallContent
-                .replace(/,\s*\}/g, '}') // Remove trailing commas
-                .replace(/([^"'\w])'([^"'\w])/g, '$1"$2') // Replace single quotes with double quotes
-                .replace(/(\w+):/g, '"$1":') // Ensure property names are quoted
-                .replace(/:/g, ': ') // Add space after colons
-                .replace(/(\s+)([a-z_]+)(:)/gi, '$1"$2"$3'); // Make sure property names are quoted
-
-              try {
-                toolCallJson = JSON.parse(fixedContent);
-              } catch (e) {
-                // If all parsing fails, try to extract the tool name and parameters manually
-                const toolMatch = toolCallContent.match(/["']?tool["']?\s*:\s*"([^"',}]+)["']?/i);
-                const paramsMatch = toolCallContent.match(
-                  /["']?parameters["']?\s*:\s*\{([^}]+)\}/i
-                );
-
-                if (toolMatch && toolMatch[1]) {
-                  const toolName = toolMatch[1].trim();
-                  const params = {};
-
-                  if (paramsMatch && paramsMatch[1]) {
-                    // Extract parameters
-                    const paramPairs = paramsMatch[1].split(',');
-                    for (const pair of paramPairs) {
-                      const keyVal = pair.split(':');
-                      if (keyVal.length === 2) {
-                        const key = keyVal[0].trim().replace(/^["']|["']$/g, '');
-                        const value = keyVal[1].trim().replace(/^["']|["']$/g, '');
-                        params[key] = value;
-                      }
-                    }
-                  }
-
-                  toolCallJson = {
-                    tool: toolName,
-                    parameters: params,
-                  };
-                }
-              }
-            }
-
-            if (toolCallJson && toolCallJson.tool) {
-              // Add to detected tool calls
-              toolCalls.push({
-                tool: toolCallJson.tool,
-                parameters: toolCallJson.parameters || {},
-                type: 'custom',
-                messageId: messageId,
-                extractedParameters: toolCallJson.parameters || {},
-              });
-            }
-          } catch (e) {
-            console.error('📡 Error parsing tool call JSON:', e);
-          }
-        }
-      }
-
-      // Store the last detected tool call if available
-      if (toolCalls.length > 0) {
-        this.state.lastToolCall = toolCalls[0];
-        this.state.extractedParameters = toolCalls[0].parameters;
-        console.log(
-          `📡 Detected ${toolCalls.length} tool calls:`,
-          toolCalls.map(tc => `${tc.tool}(${JSON.stringify(tc.parameters)})`)
-        );
-      }
-
-      return toolCalls;
-    } catch (e) {
-      console.error('📡 Error detecting custom tool calls:', e);
-      return [];
-    }
-  }
-
 
   getToolsDefinitions() {
     return this.toolDefinitions.map(tool => {
@@ -571,186 +503,163 @@ DON'T try to run the tools yourself!
     });
   }
 
-
-  async getCurrentSystemSettings() {
-    if (!this.state.authToken) {
-      console.log('📡 No auth token available yet');
-      return null;
-    }
-
-    try {
-      const response = await fetch('https://chatgpt.com/backend-api/user_system_messages', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: this.state.authToken,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to get system settings: ${response.status}`);
-      }
-
-      const settings = await response.json();
-      console.log('📡 Current system settings:', settings);
-      return settings;
-    } catch (error) {
-      console.error('📡 Error getting system settings:', error);
-      return null;
-    }
-  }
-
-  /*
-
-{
-  "object": "user_system_message_detail",
-  "enabled": true,
-  "about_user_message": "Anything else ChatGPT should know about you?", // copy of other_user_message
-  "about_model_message": "aaaaa", // copy of traits_model_message
-  "name_user_message": "What should ChatGPT call you?",
-  "role_user_message": "What do you do2",
-  "traits_model_message": "aaaaa",
-  "other_user_message": "Anything else ChatGPT should know about you?",
-  "disabled_tools": [
-    "dalle"
-  ]
-}
-*/
-
-
-  replaceOrCreateSectionInString(string, sectionStart, sectionEnd, newSection) {
-    string = string || '';
-    var replacement = sectionStart + '\n' + newSection + '\n' + sectionEnd;
-    if (newSection.length === 0) {
-      replacement = "";
-    }
-    const regex = new RegExp(
-      `${sectionStart}([\\s\\S]*?)${sectionEnd}`,
-      'g'
-    );
-    const match = regex.exec(string);
-    if (match) {
-      return string.replace(match[0], replacement);
-    }
-    return string + '\n\n' + replacement;
-  }
-
-
-  async updateSystemSettingsWithTools() {
-    if (!this.state.authToken) {
-      console.log('📡 No auth token available yet');
-      return null;
-    }
-
-    // Get current system settings
-    const currentSettings = await this.getCurrentSystemSettings();
-    if (!currentSettings) return false;
-
-    // Get available fields we can use for tool descriptions
-    const availableFields = [
-      'traits_model_message',
-      'other_user_message',
-      'role_user_message',
-      'name_user_message'
-    ];
+  // Checks if a node has already been processed with the current content
+  hasProcessedNode(node, content) {
+    if (!node) return false;
     
-    const toolsDefinitions = this.getToolsDefinitions();
-    const completePrompt = [ToolManager.SYSTEM_PROMPT, ...toolsDefinitions];
-    // Create a copy of the current settings
-    const updatedSettings = { ...currentSettings };
+    // If content is provided, check if the node was processed with this exact content
+    if (content !== undefined) {
+      const processedContent = this.processedNodes.get(node);
+      return processedContent === content;
+    }
+    
+    // Otherwise just check if the node was processed at all
+    return this.processedNodes.has(node);
+  }
 
-    try {
-      let startIndex = 0;
-      let newStartIndex = 0;
-      let lastProcessedFieldIndex = -1;
-      
-      for (let i = 0; i < availableFields.length; i++) {
-        const field = availableFields[i];
-        lastProcessedFieldIndex = i;
-        
-        let endIndex = startIndex + 1;
-        let newFieldContent = this.replaceOrCreateSectionInString(
-          currentSettings[field], 
-          ToolManager.TOOL_SECTION_START, 
-          ToolManager.TOOL_SECTION_END, 
-          completePrompt.slice(startIndex, endIndex).join('\n\n')
-        );
-        
-        while (newFieldContent.length < ToolManager.CHAR_LIMIT && 
-            endIndex < completePrompt.length) {
-          updatedSettings[field] = newFieldContent;
-          newStartIndex = endIndex;
-          endIndex++;
-          newFieldContent = this.replaceOrCreateSectionInString(
-            currentSettings[field], 
-            ToolManager.TOOL_SECTION_START, 
-            ToolManager.TOOL_SECTION_END, 
-            completePrompt.slice(startIndex, endIndex).join('\n\n')
-          );
-        }
-        
-        // Set the final content for this field
-        if (newFieldContent.length <= ToolManager.CHAR_LIMIT) {
-          updatedSettings[field] = newFieldContent;
-          newStartIndex = endIndex;
-        }
-        console.log(`📡 Setting ${field} with tool definitions (${updatedSettings[field].length} chars)`);
-        
-        // Break if we've used all tool definitions
-        if (newStartIndex >= completePrompt.length) {
-          break;
-        }
-        startIndex = newStartIndex;
+  // Marks a node as processed with the current content
+  markNodeAsProcessed(node, content) {
+    this.processedNodes.set(node, content);
+  }
+
+  // Add a new method to hide system prompts in user messages
+  hideSystemPromptInUserMessage(userMessageNode) {
+    if (!userMessageNode || this.processedNodes.has(userMessageNode)) return;
+    
+    // Function to find the deepest node containing the system prompt separator
+    const findDeepestNodeWithPrompt = (node) => {
+      // If this is a text node and contains the separator, return it
+      if (node.nodeType === Node.TEXT_NODE && 
+          node.textContent && 
+          node.textContent.includes(ToolManager.SYSTEM_PROMPT_SEPARATOR)) {
+        return node;
       }
       
-      // Clean tools from any remaining fields that weren't processed
-      // This occurs if we broke out of the loop early because all tools were already distributed
-      for (let i = lastProcessedFieldIndex + 1; i < availableFields.length; i++) {
-        const field = availableFields[i];
-        if (currentSettings[field]) {
-          // Replace any existing tool section with an empty section
-          updatedSettings[field] = this.replaceOrCreateSectionInString(
-            currentSettings[field],
-            ToolManager.TOOL_SECTION_START,
-            ToolManager.TOOL_SECTION_END,
-            "" // Empty content - removes any previously defined tools
-          );
-          console.log(`📡 Cleaned tool definitions from unused field: ${field}`);
+      // If this is an element node, check its children
+      if (node.nodeType === Node.ELEMENT_NODE && node.childNodes.length > 0) {
+        for (const child of node.childNodes) {
+          const result = findDeepestNodeWithPrompt(child);
+          if (result) return result;
         }
       }
-
-      // Compare the entire objects to detect changes
-      const hasChanges = JSON.stringify(updatedSettings) !== JSON.stringify(currentSettings);
       
-      if (hasChanges) {
-        // Send the updated settings
-        console.log('📡 Updating system settings with tool definitions:', updatedSettings);
-        const response = await fetch('https://chatgpt.com/backend-api/user_system_messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: this.state.authToken,
-          },
-          body: JSON.stringify(updatedSettings),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to update system settings: ${response.status}`);
-        }
-
-        console.log('📡 Successfully updated system settings with tool definitions');
-      } else {
-        console.log('📡 No changes to system settings needed');
+      // If we didn't find anything, return null
+      return null;
+    };
+    
+    // Find all potential container divs in the user message
+    const messageDivs = userMessageNode.querySelectorAll('div');
+    let wasModified = false;
+    
+    // First check if this message has already been processed
+    for (const div of messageDivs) {
+      if (div.querySelector('.tool-definitions-toggle')) {
+        // Already processed
+        return;
       }
-
-      return true;
-    } catch (error) {
-      console.error('📡 Error updating system settings:', error);
-      return false;
+    }
+    
+    // Go through each div and look for the system prompt
+    for (const div of messageDivs) {
+      // Find the deepest node containing the system prompt
+      const deepestNode = findDeepestNodeWithPrompt(div);
+      
+      if (deepestNode) {
+        console.log('📡 Found system prompt in deep node:', deepestNode);
+        
+        // Split the content by our separator
+        const parts = deepestNode.textContent.split(ToolManager.SYSTEM_PROMPT_SEPARATOR);
+        if (parts.length >= 2) {
+          const userMessage = parts[0].trim();
+          const toolDefinitions = parts[1].trim();
+          
+          // Update just this text node to remove the system prompt
+          deepestNode.textContent = userMessage;
+          
+          // Find parent element that will hold the toggle button
+          let parentElement = deepestNode.parentElement;
+          
+          // Create toggle button with proper styling to match the message
+          const toggleButton = document.createElement('button');
+          toggleButton.className = 'tool-definitions-toggle';
+          toggleButton.textContent = '[Show tool definitions]';
+          toggleButton.style.backgroundColor = 'transparent';
+          toggleButton.style.border = 'none';
+          toggleButton.style.color = '#888';
+          toggleButton.style.fontStyle = 'italic';
+          toggleButton.style.cursor = 'pointer';
+          toggleButton.style.fontSize = '0.85em';
+          toggleButton.style.padding = '3px 5px';
+          toggleButton.style.marginLeft = '5px';
+          toggleButton.style.display = 'inline-block';
+          
+          // Create container for tool definitions - this will be hidden initially
+          const toolDefElement = document.createElement('div');
+          toolDefElement.className = 'tool-definitions-container';
+          toolDefElement.style.display = 'none';
+          toolDefElement.style.marginTop = '8px';
+          toolDefElement.style.padding = '8px';
+          toolDefElement.style.backgroundColor = '#f0f0f0';
+          toolDefElement.style.borderRadius = '5px';
+          toolDefElement.style.whiteSpace = 'pre-wrap';
+          toolDefElement.style.fontSize = '0.9em';
+          toolDefElement.style.maxHeight = '300px';
+          toolDefElement.style.overflowY = 'auto';
+          toolDefElement.textContent = toolDefinitions;
+          
+          // Toggle visibility on click
+          toggleButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const isHidden = toolDefElement.style.display === 'none';
+            toolDefElement.style.display = isHidden ? 'block' : 'none';
+            toggleButton.textContent = isHidden ? '[Hide tool definitions]' : '[Show tool definitions]';
+          });
+          
+          // Insert the toggle button after the modified text node
+          if (deepestNode.nextSibling) {
+            parentElement.insertBefore(toggleButton, deepestNode.nextSibling);
+          } else {
+            parentElement.appendChild(toggleButton);
+          }
+          
+          // Add the tool definitions container at the end of the parent element
+          // We'll look for a good container element to put it in
+          let toolDefContainer = parentElement;
+          
+          // Try to find a better container with proper styling
+          let messageContainer = parentElement;
+          while (messageContainer && 
+                (!messageContainer.className || 
+                 !messageContainer.className.includes('message-container') && 
+                 !messageContainer.className.includes('bg-token'))) {
+            messageContainer = messageContainer.parentElement;
+            if (messageContainer && (messageContainer.className && 
+                (messageContainer.className.includes('message-container') || 
+                 messageContainer.className.includes('bg-token')))) {
+              toolDefContainer = messageContainer;
+              break;
+            }
+          }
+          
+          toolDefContainer.appendChild(toolDefElement);
+          
+          console.log('📡 Hidden system prompt in user message:', userMessage.substring(0, 50));
+          
+          // Mark this element as processed
+          this.markNodeAsProcessed(parentElement, 'system-prompt-hidden');
+          wasModified = true;
+          break; // We only need to process one instance per message
+        }
+      }
+    }
+    
+    // If we modified anything, mark the user message as processed
+    if (wasModified) {
+      this.markNodeAsProcessed(userMessageNode, 'system-prompt-hidden');
     }
   }
 }
-
 
 /* eslint-disable no-undef */
 if (typeof exposeModule === 'function') {

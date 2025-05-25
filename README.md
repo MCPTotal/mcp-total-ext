@@ -1,4 +1,4 @@
-# MCP Total Extension
+# MCPTotal Extension
 
 A Chrome extension that seamlessly integrates Model Context Protocol (MCP) server tools into the ChatGPT interface, enabling powerful AI-powered tool usage without leaving your chat.
 
@@ -135,32 +135,7 @@ You can use [mcp-proxy](https://github.com/sparfenyuk/mcp-proxy) to adapt stdio-
 
 ### Managing MCP Servers
 
-After opening ChatGPT with the extension active, you can add and manage MCP servers through:
-
-1. The server configuration UI (available via keyboard shortcut or browser console)
-2. Browser console commands for debugging:
-
-```javascript
-// Add a new MCP server
-window.addMcpServer({
-  id: "my-server",
-  url: "http://localhost:8020/sse",
-  apiKey: "", // Optional API key
-  enabled: true
-});
-
-// List configured servers
-window.getMcpServers();
-
-// Enable/disable a server
-window.setMcpServerStatus("my-server", true);
-
-// Test connection to a server
-window.testServerConnection("my-server");
-
-// Toggle debug mode (requires page refresh)
-window.setDebugMode(true);
-```
+After opening ChatGPT with the extension active, you can add and manage MCP servers through the server configuration UI (available via keyboard shortcut or browser console)
 
 ## How It Works
 
@@ -197,26 +172,23 @@ The extension supports:
 - Only the specific arguments needed for tools are sent to MCP servers
 - Permissions are limited to the minimum required
 
-## Debug Mode
+## Troubleshooting
 
-The extension includes a debug mode for development and testing:
+Common issues and solutions:
+1. Server connection failures:
+   - Check server URL and API key
+   - Verify network connectivity
+   - Check browser console for errors
 
-1. Enable debug mode:
-   ```javascript
-   window.setDebugMode(true);
-   ```
-   Or add `?mcp_debug=true` to the ChatGPT URL
+2. Tool execution issues:
+   - Verify tool parameters
+   - Check server logs
+   - Ensure server is enabled
 
-2. Debug mode features:
-   - Dynamic module loading for faster iteration
-   - Global access to component instances
-   - Verbose logging
-   - Additional debugging tools and UI
-
-3. Open the MCP configuration UI directly:
-   ```javascript
-   window.openMcpConfig();
-   ```
+3. UI problems:
+   - Clear browser cache
+   - Reload the extension
+   - Check for console errors
 
 Open Issues:
 1. Support for StreamableHTTP

@@ -17,7 +17,7 @@ A high-quality listing helps your extension get discovered and builds trust with
 
 ### Item Title
 
-- **Name**: "MCP Total Extension"
+- **Name**: "MCPTotal Extension"
 - Keep it clear, concise, and descriptive
 - Accurately reflect the extension's core function
 - Avoid keyword stuffing or generic superlatives
@@ -41,7 +41,7 @@ Format your description with:
 - Information on how to get started
 
 ```
-MCP Total Extension seamlessly integrates Model Context Protocol (MCP) servers with the ChatGPT interface, allowing you to extend ChatGPT with custom AI tools and capabilities.
+MCPTotal Extension seamlessly integrates Model Context Protocol (MCP) servers with the ChatGPT interface, allowing you to extend ChatGPT with custom AI tools and capabilities.
 
 ✨ WHAT IT DOES
 This extension lets you connect ChatGPT to any MCP-compatible tools and services. Once connected, ChatGPT can use these tools directly in your conversations, enabling you to build and use custom AI capabilities beyond ChatGPT's built-in features.
@@ -115,7 +115,7 @@ https://www.youtube.com/watch?v=97UxIhaFrG8
   - Avoid overwhelming text in the screenshots
   - Consider adding captions to explain features
 
-- **Suggested screenshots for MCP Total Extension**:
+- **Suggested screenshots for MCPTotal Extension**:
   1. The extension showing tools being registered in ChatGPT
   2. A conversation with ChatGPT where a tool is being used
   3. The server configuration UI
