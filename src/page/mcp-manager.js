@@ -239,7 +239,7 @@ class McpManager {
           });
 
 
-          console.log(`📡 Added ${toolDefinitions.length} tools for MCP server ${server.id}`);
+          console.log(`📡 Added ${toolDefinitions.length} tools for MCP server ${server.id}:`, tools);
         } catch (error) {
           console.error(`📡 Error processing tools from MCP server ${server.id}:`, error);
         }

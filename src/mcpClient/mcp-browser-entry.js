@@ -1,6 +1,7 @@
 // Import the necessary parts from the MCP SDK
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 // Create a browser-friendly wrapper around the MCP client
 class BrowserMcpClient {
@@ -11,6 +12,7 @@ class BrowserMcpClient {
     this.connected = false;
     this.tools = [];
     this.authToken = null;
+    this.transportType = null;
   }
 
   // Set authentication token
@@ -27,31 +29,62 @@ class BrowserMcpClient {
     }
 
     try {
-      // Create client instance
-      this.client = new Client({
-        name: 'browser-mcp-client',
-        version: '1.0.0'
-      });
-
-      // Create the URL object with authentication in the URL if needed
+      // Create base URL object
       const url = new URL(this.serverUrl);
       
-      // For SSE, we might need to pass auth as a URL parameter since
-      // EventSource doesn't support custom headers in all browsers
-      if (this.authToken) {
-        url.searchParams.set('authorization', `Bearer ${this.authToken}`);
-      }
-      
-      // Create SSE transport
-      this.transport = new SSEClientTransport(url);
+      // Try StreamableHTTP first
+      try {
+        // Create client instance
+        this.client = new Client({
+          name: 'browser-mcp-client',
+          version: '1.0.0'
+        });
+        
+        // For StreamableHTTP, we use proper Authorization headers (preferred method)
+        const headers = {};
+        if (this.authToken) {
+          headers['Authorization'] = `Bearer ${this.authToken}`;
+        }
+        
+        this.transport = new StreamableHTTPClientTransport(url, { headers });
 
-      // Connect to the server
-      await this.client.connect(this.transport);
-      this.connected = true;
-      
-      console.log('Connected to MCP server:', this.serverUrl);
-      
-      return true;
+        // Connect to the server
+        await this.client.connect(this.transport);
+        this.connected = true;
+        this.transportType = 'streamableHttp';
+        
+        console.log('Connected to MCP server using StreamableHTTP transport:', this.serverUrl);
+        
+        return true;
+      } catch (streamableError) {
+        // If StreamableHTTP fails, fall back to SSE
+        console.log('StreamableHTTP connection failed, falling back to SSE transport:', streamableError);
+        
+        // Create new client instance
+        this.client = new Client({
+          name: 'browser-mcp-client',
+          version: '1.0.0'
+        });
+        
+        // For SSE transport, we MUST use URL parameters for authentication
+        // This is because browser's native EventSource API doesn't support custom headers
+        const sseUrl = new URL(this.serverUrl);
+        if (this.authToken) {
+          sseUrl.searchParams.set('authorization', `Bearer ${this.authToken}`);
+        }
+        
+        // Create SSE transport
+        this.transport = new SSEClientTransport(sseUrl);
+
+        // Connect to the server
+        await this.client.connect(this.transport);
+        this.connected = true;
+        this.transportType = 'sse';
+        
+        console.log('Connected to MCP server using SSE transport:', this.serverUrl);
+        
+        return true;
+      }
     } catch (error) {
       console.error('Error connecting to MCP server:', error);
       this.disconnect();
@@ -73,6 +106,7 @@ class BrowserMcpClient {
       this.client = null;
       this.transport = null;
       this.connected = false;
+      this.transportType = null;
       console.log('Disconnected from MCP server');
     }
   }
@@ -195,16 +229,12 @@ class BrowserMcpClient {
       throw error;
     }
   }
+  
+  // Get the current transport type
+  getTransportType() {
+    return this.transportType;
+  }
 }
-
-// Try to import Streamable HTTP transport if available
-let StreamableHTTPClientTransport;
-try {
-  StreamableHTTPClientTransport = require('@modelcontextprotocol/sdk/client/streamableHttp.js').StreamableHTTPClientTransport;
-} catch (error) {
-  console.log('StreamableHTTPClientTransport not available, falling back to SSE transport only');
-}
-
 
 const MCPClient = {
   Client: BrowserMcpClient,

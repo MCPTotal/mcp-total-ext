@@ -61,7 +61,7 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
       this.toolDefinitions.push(toolDefinition);
     }
 
-    console.log(`📡 Registered tool: ${name}`);
+    //console.log(`📡 Registered tool: ${name}`);
 
     return toolDefinition;
   }
@@ -579,70 +579,8 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
           // Find parent element that will hold the toggle button
           let parentElement = deepestNode.parentElement;
           
-          // Create toggle button with proper styling to match the message
-          const toggleButton = document.createElement('button');
-          toggleButton.className = 'tool-definitions-toggle';
-          toggleButton.textContent = '[Show tool definitions]';
-          toggleButton.style.backgroundColor = 'transparent';
-          toggleButton.style.border = 'none';
-          toggleButton.style.color = '#888';
-          toggleButton.style.fontStyle = 'italic';
-          toggleButton.style.cursor = 'pointer';
-          toggleButton.style.fontSize = '0.85em';
-          toggleButton.style.padding = '3px 5px';
-          toggleButton.style.marginLeft = '5px';
-          toggleButton.style.display = 'inline-block';
-          
-          // Create container for tool definitions - this will be hidden initially
-          const toolDefElement = document.createElement('div');
-          toolDefElement.className = 'tool-definitions-container';
-          toolDefElement.style.display = 'none';
-          toolDefElement.style.marginTop = '8px';
-          toolDefElement.style.padding = '8px';
-          toolDefElement.style.backgroundColor = '#f0f0f0';
-          toolDefElement.style.borderRadius = '5px';
-          toolDefElement.style.whiteSpace = 'pre-wrap';
-          toolDefElement.style.fontSize = '0.9em';
-          toolDefElement.style.maxHeight = '300px';
-          toolDefElement.style.overflowY = 'auto';
-          toolDefElement.textContent = toolDefinitions;
-          
-          // Toggle visibility on click
-          toggleButton.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const isHidden = toolDefElement.style.display === 'none';
-            toolDefElement.style.display = isHidden ? 'block' : 'none';
-            toggleButton.textContent = isHidden ? '[Hide tool definitions]' : '[Show tool definitions]';
-          });
-          
-          // Insert the toggle button after the modified text node
-          if (deepestNode.nextSibling) {
-            parentElement.insertBefore(toggleButton, deepestNode.nextSibling);
-          } else {
-            parentElement.appendChild(toggleButton);
-          }
-          
-          // Add the tool definitions container at the end of the parent element
-          // We'll look for a good container element to put it in
-          let toolDefContainer = parentElement;
-          
-          // Try to find a better container with proper styling
-          let messageContainer = parentElement;
-          while (messageContainer && 
-                (!messageContainer.className || 
-                 !messageContainer.className.includes('message-container') && 
-                 !messageContainer.className.includes('bg-token'))) {
-            messageContainer = messageContainer.parentElement;
-            if (messageContainer && (messageContainer.className && 
-                (messageContainer.className.includes('message-container') || 
-                 messageContainer.className.includes('bg-token')))) {
-              toolDefContainer = messageContainer;
-              break;
-            }
-          }
-          
-          toolDefContainer.appendChild(toolDefElement);
+          // Use UIManager to create theme-aware system prompt toggle
+          this.uiManager.createSystemPromptToggle(userMessage, toolDefinitions, parentElement, deepestNode);
           
           console.log('📡 Hidden system prompt in user message:', userMessage.substring(0, 50));
           

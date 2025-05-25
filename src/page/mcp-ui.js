@@ -3,34 +3,63 @@
  * Handles UI components for MCP server configuration
  */
 class McpUI {
-  constructor() {
+  constructor(themeManager) {
     this.mcpManager = null;
     this._onShowServerConfigUI = null;
     this._activeModal = null; // Track the currently active modal
     this._escKeyListener = null; // Track ESC key listener
     
-    // Define consistent color palette
-    this.colors = {
-      primary: '#4b5563',       // Main button color (slate gray)
-      primaryLight: '#6b7280',  // Light variant for hover
-      success: '#10b981',       // Success/enable actions
-      successLight: '#34d399',  // Light variant for hover
-      danger: '#ef4444',        // Danger/delete actions
-      dangerLight: '#f87171',   // Light variant for hover
-      info: '#3b82f6',          // Info/edit actions
-      infoLight: '#60a5fa',     // Light variant for hover
+    // Initialize theme manager - first check if it's available globally
+    this.themeManager = themeManager;
+    if (!this.themeManager) {
+      console.warn('🎨 ThemeManager not available in McpUI, falling back to light theme');
+      // Fallback to light theme colors if theme manager is not available
+      this.colors = this._getFallbackColors();
+    } else {
+      // Use theme manager colors
+      this.colors = this.themeManager.getColors();
       
-      // UI colors
+      // Register for theme changes to update our colors
+      this._themeUnsubscribe = this.themeManager.onThemeChange((theme, colors) => {
+        console.log(`🎨 McpUI received theme change: ${theme}`);
+        this.colors = colors;
+      });
+    }
+  }
+
+  /**
+   * Fallback colors for when theme manager is not available
+   */
+  _getFallbackColors() {
+    return {
+      primary: '#4b5563',
+      primaryLight: '#6b7280',
+      success: '#10b981',
+      successLight: '#34d399',
+      danger: '#ef4444',
+      dangerLight: '#f87171',
+      info: '#3b82f6',
+      infoLight: '#60a5fa',
       border: '#e5e7eb',
       background: '#ffffff',
       backgroundLight: '#f9fafb',
+      backgroundInput: '#f8f9fa',
+      backgroundModal: '#ffffff',
+      backgroundHover: '#f3f4f6',
       text: '#1f2937',
       textSecondary: '#6b7280',
-      
-      // Status colors
       statusEnabled: '#10b981',
       statusDisabled: '#ef4444'
     };
+  }
+
+  /**
+   * Cleanup method to unsubscribe from theme changes
+   */
+  destroy() {
+    if (this._themeUnsubscribe) {
+      this._themeUnsubscribe();
+    }
   }
 
   /**
@@ -88,7 +117,8 @@ class McpUI {
     // Create modal content
     const modalContent = document.createElement('div');
     modalContent.style.cssText = `
-      background: white;
+      background: ${this.colors.backgroundModal};
+      color: ${this.colors.text};
       border-radius: 8px;
       padding: 20px;
       width: 80%;
@@ -103,9 +133,9 @@ class McpUI {
     heading.textContent = 'MCP Server Configuration';
     heading.style.cssText = `
       margin-top: 0;
-      color: #333;
+      color: ${this.colors.text};
       font-size: 18px;
-      border-bottom: 1px solid #eee;
+      border-bottom: 1px solid ${this.colors.border};
       padding-bottom: 10px;
       display: flex;
       justify-content: space-between;
@@ -117,9 +147,9 @@ class McpUI {
     shortcutHint.textContent = shortcutText;
     shortcutHint.style.cssText = `
       font-size: 12px;
-      color: #6b7280;
+      color: ${this.colors.textSecondary};
       font-weight: normal;
-      background: #f3f4f6;
+      background: ${this.colors.backgroundLight};
       padding: 2px 6px;
       border-radius: 4px;
     `;
@@ -139,7 +169,7 @@ class McpUI {
         const emptyMsg = document.createElement('p');
         emptyMsg.textContent = 'No servers configured.';
         emptyMsg.style.cssText = `
-          color: #666;
+          color: ${this.colors.textSecondary};
           font-style: italic;
         `;
         serverList.appendChild(emptyMsg);
@@ -154,7 +184,8 @@ class McpUI {
             border: 1px solid ${this.colors.border};
             border-radius: 4px;
             margin-bottom: 8px;
-            background: ${server.enabled ? this.colors.backgroundLight : this.colors.background};
+            background: ${server.enabled ? this.colors.backgroundLight : this.colors.backgroundModal};
+            color: ${this.colors.text};
           `;
           
           const serverInfo = document.createElement('div');
@@ -293,10 +324,11 @@ class McpUI {
     formContainer.style.cssText = `
       display: none;
       padding: 15px;
-      border: 1px solid #ddd;
+      border: 1px solid ${this.colors.border};
       border-radius: 4px;
       margin-bottom: 20px;
-      background: #f9fafb;
+      background: ${this.colors.backgroundLight};
+      color: ${this.colors.text};
     `;
     
     // Function to show server form
@@ -304,40 +336,40 @@ class McpUI {
       const isEditing = !!serverToEdit;
       
       formContainer.innerHTML = `
-        <h3 style="margin-top: 0; font-size: 16px;">${isEditing ? 'Edit' : 'Add'} MCP Server</h3>
+        <h3 style="margin-top: 0; font-size: 16px; color: ${this.colors.text};">${isEditing ? 'Edit' : 'Add'} MCP Server</h3>
         
         <div style="margin-bottom: 12px;">
-          <label style="display: block; margin-bottom: 4px; font-weight: bold;">Server ID:</label>
+          <label style="display: block; margin-bottom: 4px; font-weight: bold; color: ${this.colors.text};">Server ID:</label>
           <input type="text" id="server-id" ${isEditing ? 'disabled' : ''} 
             value="${isEditing ? serverToEdit.id : ''}" 
-            style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
-          <div style="font-size: 11px; color: #666; margin-top: 2px;">
+            style="width: 100%; padding: 6px; border: 1px solid ${this.colors.border}; border-radius: 4px; background: ${this.colors.backgroundInput}; color: ${this.colors.text};">
+          <div style="font-size: 11px; color: ${this.colors.textSecondary}; margin-top: 2px;">
             Unique identifier for this server. Cannot be changed once created.
           </div>
         </div>
         
         <div style="margin-bottom: 12px;">
-          <label style="display: block; margin-bottom: 4px; font-weight: bold;">Server URL:</label>
+          <label style="display: block; margin-bottom: 4px; font-weight: bold; color: ${this.colors.text};">Server URL:</label>
           <input type="text" id="server-url" 
             value="${isEditing ? serverToEdit.url : 'https://'}" 
-            style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
-          <div style="font-size: 11px; color: #666; margin-top: 2px;">
+            style="width: 100%; padding: 6px; border: 1px solid ${this.colors.border}; border-radius: 4px; background: ${this.colors.backgroundInput}; color: ${this.colors.text};">
+          <div style="font-size: 11px; color: ${this.colors.textSecondary}; margin-top: 2px;">
             Full URL to the MCP server endpoint (e.g., https://example.com/mcp)
           </div>
         </div>
         
         <div style="margin-bottom: 12px;">
-          <label style="display: block; margin-bottom: 4px; font-weight: bold;">API Key:</label>
+          <label style="display: block; margin-bottom: 4px; font-weight: bold; color: ${this.colors.text};">API Key:</label>
           <input type="password" id="server-api-key" 
             value="${isEditing ? serverToEdit.apiKey : ''}" 
-            style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
-          <div style="font-size: 11px; color: #666; margin-top: 2px;">
+            style="width: 100%; padding: 6px; border: 1px solid ${this.colors.border}; border-radius: 4px; background: ${this.colors.backgroundInput}; color: ${this.colors.text};">
+          <div style="font-size: 11px; color: ${this.colors.textSecondary}; margin-top: 2px;">
             Authentication key for accessing the server (if required)
           </div>
         </div>
         
         <div style="margin-bottom: 12px;">
-          <label style="display: flex; align-items: center; cursor: pointer;">
+          <label style="display: flex; align-items: center; cursor: pointer; color: ${this.colors.text};">
             <input type="checkbox" id="server-enabled" ${isEditing && serverToEdit.enabled ? 'checked' : ''} 
               style="margin-right: 6px;">
             <span>Enabled</span>
@@ -345,10 +377,10 @@ class McpUI {
         </div>
         
         <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px;">
-          <button id="cancel-btn" style="padding: 6px 12px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer;">
+          <button id="cancel-btn" style="padding: 6px 12px; border: 1px solid ${this.colors.border}; background: ${this.colors.backgroundModal}; color: ${this.colors.text}; border-radius: 4px; cursor: pointer;">
             Cancel
           </button>
-          <button id="save-btn" style="padding: 6px 12px; background: #8e44ad; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          <button id="save-btn" style="padding: 6px 12px; background: ${this.colors.primary}; color: white; border: none; border-radius: 4px; cursor: pointer;">
             ${isEditing ? 'Update' : 'Add'} Server
           </button>
         </div>

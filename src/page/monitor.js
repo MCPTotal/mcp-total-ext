@@ -87,6 +87,7 @@
       try {
         // Load all modules in the correct dependency order
         const utils = await importModule('src/page/utils.js');
+        const themeManager = await importModule('src/page/theme-manager.js');
         const { PageMcpClient } = await importModule('src/page/page-client.js');
         const UIManager = await importModule('src/page/ui-manager.js');
         const ToolManager = await importModule('src/page/tool-manager.js');
@@ -103,7 +104,8 @@
           McpUI,
           McpManager,
           PageMcpClient,
-          sendContentMessage
+          sendContentMessage,
+          themeManager
         });
 
         console.log('📡 DEBUG Monitor active - Source Modules Loaded');
@@ -116,9 +118,10 @@
   } else {
     // Production mode - direct require approach
     try {
-      // Import modules
+      // Import other modules
       const { PageMcpClient } = require('./page-client');
       const { sendContentMessage } = require('./utils');
+      const themeManager = require('./theme-manager');
       const ToolManager = require('./tool-manager');
       const McpManager = require('./mcp-manager');
       const UIManager = require('./ui-manager');
@@ -131,7 +134,8 @@
         McpUI,
         McpManager,
         PageMcpClient,
-        sendContentMessage
+        sendContentMessage,
+        themeManager
       });
 
       console.log('📡 Production Monitor active - Modular Architecture');
@@ -148,13 +152,14 @@
       McpUI,
       McpManager,
       PageMcpClient,
-      sendContentMessage
+      sendContentMessage,
+      themeManager
     } = modules;
 
     // Initialize components
-    const uiManager = new UIManager();
+    const uiManager = new UIManager(themeManager);
     const toolManager = new ToolManager(uiManager);
-    const mcpUI = new McpUI();
+    const mcpUI = new McpUI(themeManager);
     const mcpManager = new McpManager(toolManager, mcpUI, PageMcpClient);
 
     // In debug mode, expose instances for console debugging

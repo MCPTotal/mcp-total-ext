@@ -2,36 +2,151 @@
 // UIManager Class
 // ==============================
 class UIManager {
-  constructor() {
+  constructor(themeManager) {
     // Store tool automation preferences
     this.toolPreferences = {};
     // Load preferences from localStorage on initialization
     this.loadToolPreferences();
     
-    // Define consistent color palette
-    this.colors = {
-      primary: '#4b5563',       // Main button color (slate gray)
-      primaryLight: '#6b7280',  // Light variant for hover
-      success: '#10b981',       // Success/enable actions
-      successLight: '#34d399',  // Light variant for hover
-      danger: '#ef4444',        // Danger/delete actions
-      dangerLight: '#f87171',   // Light variant for hover
-      info: '#3b82f6',          // Info/edit actions
-      infoLight: '#60a5fa',     // Light variant for hover
-      purple: '#6d28d9',        // Tool buttons (purple)
-      purpleLight: '#7c3aed',   // Light variant for hover
+    // Initialize theme manager - first check if it's available globally
+    this.themeManager = themeManager;
+    if (!this.themeManager) {
+      console.warn('🎨 ThemeManager not available, falling back to light theme');
+      // Fallback to light theme colors if theme manager is not available
+      this.colors = this._getFallbackColors();
+    } else {
+      // Use theme manager colors
+      this.colors = this.themeManager.getColors();
+      console.log('🎨 UIManager theme:', this.themeManager.getCurrentTheme());
       
-      // UI colors
+      // Register for theme changes to update our colors
+      this._themeUnsubscribe = this.themeManager.onThemeChange((theme, colors) => {
+        console.log(`🎨 UIManager received theme change: ${theme}`);
+        this.colors = colors;
+        this._onThemeChanged();
+      });
+    }
+  }
+
+  /**
+   * Handle theme changes by updating any active UI elements
+   */
+  _onThemeChanged() {
+    // Re-apply styles to any existing tool result elements
+    const toolResultElements = document.querySelectorAll('.tool-result-element');
+    toolResultElements.forEach(element => {
+      this._updateElementTheme(element);
+    });
+    
+    // Re-apply styles to any existing settings menus
+    const settingsMenus = document.querySelectorAll('.tool-settings-menu');
+    settingsMenus.forEach(menu => {
+      this._updateSettingsMenuTheme(menu);
+    });
+    
+    // Re-apply styles to any existing system prompt toggles
+    this._updateSystemPromptTheme();
+  }
+
+  /**
+   * Update an element's theme-dependent styles
+   */
+  _updateElementTheme(element) {
+    if (element.classList.contains('tool-result-element')) {
+      element.style.backgroundColor = this.colors.resultBackground;
+      element.style.borderColor = this.colors.resultBorder;
+      element.style.color = this.colors.resultText;
+    }
+  }
+
+  /**
+   * Update settings menu theme
+   */
+  _updateSettingsMenuTheme(menu) {
+    menu.style.backgroundColor = this.colors.backgroundModal;
+    menu.style.borderColor = this.colors.border;
+    
+    // Update child buttons
+    const buttons = menu.querySelectorAll('button');
+    buttons.forEach(button => {
+      const isSelected = button.style.backgroundColor === this.colors.highlightBg;
+      button.style.backgroundColor = isSelected ? this.colors.highlightBg : 'transparent';
+      button.style.color = isSelected ? this.colors.highlightText : this.colors.text;
+    });
+  }
+
+  /**
+   * Update system prompt theme
+   */
+  _updateSystemPromptTheme() {
+    // Update toggle buttons
+    const toggleButtons = document.querySelectorAll('.tool-definitions-toggle');
+    toggleButtons.forEach(button => {
+      button.style.color = `${this.colors.textSecondary} !important`;
+      
+      // Update hover events with new colors
+      button.onmouseover = () => {
+        button.style.color = this.colors.text;
+      };
+      
+      button.onmouseout = () => {
+        button.style.color = this.colors.textSecondary;
+      };
+    });
+    
+    // Update tool definitions containers
+    const toolDefContainers = document.querySelectorAll('.tool-definitions-container');
+    toolDefContainers.forEach(container => {
+      container.style.backgroundColor = `${this.colors.backgroundLight} !important`;
+      container.style.color = `${this.colors.text} !important`;
+      container.style.borderColor = `${this.colors.border} !important`;
+    });
+    
+    console.log('🎨 Updated system prompt theme for', toggleButtons.length, 'toggles and', toolDefContainers.length, 'containers');
+  }
+
+  /**
+   * Fallback colors for when theme manager is not available
+   */
+  _getFallbackColors() {
+    return {
+      primary: '#4b5563',
+      primaryLight: '#6b7280',
+      success: '#10b981',
+      successLight: '#34d399',
+      danger: '#ef4444',
+      dangerLight: '#f87171',
+      info: '#3b82f6',
+      infoLight: '#60a5fa',
+      purple: '#6d28d9',
+      purpleLight: '#7c3aed',
       border: '#e5e7eb',
       background: '#ffffff',
       backgroundLight: '#f9fafb',
+      backgroundInput: '#f8f9fa',
+      backgroundModal: '#ffffff',
+      backgroundHover: '#f3f4f6',
       text: '#1f2937',
       textSecondary: '#6b7280',
-      
-      // Highlight colors
+      textPlaceholder: '#9ca3af',
+      statusEnabled: '#10b981',
+      statusDisabled: '#ef4444',
       highlightBg: '#f3f4f6',
-      highlightText: '#4f46e5'
+      highlightText: '#4f46e5',
+      resultBackground: '#f8f9fa',
+      resultBorder: '#e9ecef',
+      resultBorderHover: '#ced4da',
+      resultText: '#1f2937'
     };
+  }
+
+  /**
+   * Cleanup method to unsubscribe from theme changes
+   */
+  destroy() {
+    if (this._themeUnsubscribe) {
+      this._themeUnsubscribe();
+    }
   }
 
   // Load tool preferences from localStorage
@@ -149,8 +264,9 @@ class UIManager {
     const settingsMenu = document.createElement('div');
     settingsMenu.className = 'tool-settings-menu';
     settingsMenu.style.cssText = `
-      background-color: white;
+      background-color: ${this.colors.backgroundModal};
       border: 1px solid ${this.colors.border};
+      color: ${this.colors.text};
       border-radius: 6px;
       padding: 4px;
       margin-top: 8px;
@@ -244,7 +360,7 @@ class UIManager {
 
     // Add hover effect
     button.addEventListener('mouseover', () => {
-      button.style.backgroundColor = isSelected ? this.colors.highlightBg : this.colors.backgroundLight;
+      button.style.backgroundColor = isSelected ? this.colors.highlightBg : this.colors.backgroundHover;
     });
 
     button.addEventListener('mouseout', () => {
@@ -416,9 +532,11 @@ class UIManager {
 
     // Result display element
     const resultElement = document.createElement('pre');
+    resultElement.className = 'tool-result-element'; // Add class for theme updates
     resultElement.style.cssText = `
-      background-color: #f8f9fa;
-      border: 1px solid #e9ecef;
+      background-color: ${this.colors.resultBackground} !important;
+      border: 1px solid ${this.colors.resultBorder} !important;
+      color: ${this.colors.resultText} !important;
       border-radius: 6px;
       padding: 10px;
       margin-top: 8px;
@@ -438,21 +556,30 @@ class UIManager {
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
       transition: border-color 0.2s;
     `;
+    
+    console.log('🎨 Tool result styling:', {
+      theme: this.themeManager?.getCurrentTheme(),
+      resultBackground: this.colors.resultBackground,
+      resultBorder: this.colors.resultBorder,
+      resultText: this.colors.resultText
+    });
 
     // Add visual cue on hover
     resultElement.addEventListener('mouseover', () => {
-      resultElement.style.borderColor = '#ced4da';
+      resultElement.style.borderColor = this.colors.resultBorderHover;
     });
 
     resultElement.addEventListener('mouseout', () => {
-      resultElement.style.borderColor = '#e9ecef';
+      resultElement.style.borderColor = this.colors.resultBorder;
     });
 
     // Create editable result textarea (initially hidden)
     const editableResult = document.createElement('textarea');
+    editableResult.className = 'tool-result-element'; // Add class for theme updates
     editableResult.style.cssText = `
-      background-color: #f8f9fa;
-      border: 1px solid #ced4da;
+      background-color: ${this.colors.resultBackground} !important;
+      border: 1px solid ${this.colors.resultBorder} !important;
+      color: ${this.colors.resultText} !important;
       border-radius: 6px;
       padding: 10px;
       margin-top: 8px;
@@ -827,6 +954,104 @@ class UIManager {
     } catch (e) {
       console.error('📡 Error injecting error message:', e);
     }
+  }
+
+  /**
+   * Create theme-aware system prompt toggle UI
+   */
+  createSystemPromptToggle(userMessage, toolDefinitions, parentElement, deepestNode) {
+    console.log('🎨 Creating system prompt toggle with theme:', this.themeManager?.getCurrentTheme());
+    
+    // Create toggle button with theme-aware styling
+    const toggleButton = document.createElement('button');
+    toggleButton.className = 'tool-definitions-toggle';
+    toggleButton.textContent = '[Show tool definitions]';
+    toggleButton.style.cssText = `
+      background-color: transparent !important;
+      border: none !important;
+      color: ${this.colors.textSecondary} !important;
+      font-style: italic;
+      cursor: pointer;
+      font-size: 0.85em;
+      padding: 3px 5px;
+      margin-left: 5px;
+      display: inline-block;
+      transition: color 0.2s ease;
+    `;
+    
+    // Create container for tool definitions with theme-aware styling
+    const toolDefElement = document.createElement('div');
+    toolDefElement.className = 'tool-definitions-container';
+    toolDefElement.style.cssText = `
+      display: none;
+      margin-top: 8px;
+      padding: 8px;
+      background-color: ${this.colors.backgroundLight} !important;
+      color: ${this.colors.text} !important;
+      border: 1px solid ${this.colors.border} !important;
+      border-radius: 5px;
+      white-space: pre-wrap;
+      font-size: 0.9em;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: monospace;
+      line-height: 1.4;
+    `;
+    toolDefElement.textContent = toolDefinitions;
+    
+    // Add hover effect to toggle button
+    toggleButton.addEventListener('mouseover', () => {
+      toggleButton.style.color = this.colors.text;
+    });
+    
+    toggleButton.addEventListener('mouseout', () => {
+      toggleButton.style.color = this.colors.textSecondary;
+    });
+    
+    // Toggle visibility on click
+    toggleButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const isHidden = toolDefElement.style.display === 'none';
+      toolDefElement.style.display = isHidden ? 'block' : 'none';
+      toggleButton.textContent = isHidden ? '[Hide tool definitions]' : '[Show tool definitions]';
+    });
+    
+    // Insert the toggle button after the modified text node
+    if (deepestNode.nextSibling) {
+      parentElement.insertBefore(toggleButton, deepestNode.nextSibling);
+    } else {
+      parentElement.appendChild(toggleButton);
+    }
+    
+    // Find the best container for the tool definitions
+    let toolDefContainer = parentElement;
+    
+    // Try to find a better container with proper styling
+    let messageContainer = parentElement;
+    while (messageContainer && 
+          (!messageContainer.className || 
+           !messageContainer.className.includes('message-container') && 
+           !messageContainer.className.includes('bg-token'))) {
+      messageContainer = messageContainer.parentElement;
+      if (messageContainer && (messageContainer.className && 
+          (messageContainer.className.includes('message-container') || 
+           messageContainer.className.includes('bg-token')))) {
+        toolDefContainer = messageContainer;
+        break;
+      }
+    }
+    
+    toolDefContainer.appendChild(toolDefElement);
+    
+    console.log('🎨 System prompt toggle created with theme colors:', {
+      toggleColor: this.colors.textSecondary,
+      backgroundLight: this.colors.backgroundLight,
+      text: this.colors.text,
+      border: this.colors.border
+    });
+    
+    return { toggleButton, toolDefElement };
   }
 }
 
