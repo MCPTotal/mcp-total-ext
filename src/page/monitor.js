@@ -87,7 +87,8 @@
       try {
         // Load all modules in the correct dependency order
         const utils = await importModule('src/page/utils.js');
-        const themeManager = await importModule('src/page/theme-manager.js');
+        const platformAdapter = await importModule('src/page/platform-adapter.js');
+        const ThemeManager = await importModule('src/page/theme-manager.js');
         const { PageMcpClient } = await importModule('src/page/page-client.js');
         const UIManager = await importModule('src/page/ui-manager.js');
         const ToolManager = await importModule('src/page/tool-manager.js');
@@ -105,7 +106,8 @@
           McpManager,
           PageMcpClient,
           sendContentMessage,
-          themeManager
+          ThemeManager,
+          platformAdapter
         });
 
         console.log('📡 DEBUG Monitor active - Source Modules Loaded');
@@ -113,7 +115,23 @@
       } catch (error) {
         console.error('📡 Error initializing debug monitor:', error);
       }
+
+      const tests = true;
+      if (tests) {
+        console.log('<<<<<<< Running tests <<<<<<<');
+        const platformTest = await importModule('src/page/platform-test.js');
+        setTimeout(() => {
+          console.log('<<<<<<< Running platform tests <<<<<<<');
+          platformTest.main();
+          console.log('>>>>>>> Platform test completed >>>>>>>');
+        }, 1000);
+        console.log('>>>>>>> Tests completed >>>>>>>');
+      }
+  
     }
+
+
+
     /* eslint-enable no-inner-declarations */
   } else {
     // Production mode - direct require approach
@@ -121,7 +139,8 @@
       // Import other modules
       const { PageMcpClient } = require('./page-client');
       const { sendContentMessage } = require('./utils');
-      const themeManager = require('./theme-manager');
+      const platformAdapter = require('./platform-adapter');
+      const ThemeManager = require('./theme-manager');
       const ToolManager = require('./tool-manager');
       const McpManager = require('./mcp-manager');
       const UIManager = require('./ui-manager');
@@ -135,7 +154,8 @@
         McpManager,
         PageMcpClient,
         sendContentMessage,
-        themeManager
+        ThemeManager,
+        platformAdapter
       });
 
       console.log('📡 Production Monitor active - Modular Architecture');
@@ -153,12 +173,14 @@
       McpManager,
       PageMcpClient,
       sendContentMessage,
-      themeManager
+      ThemeManager,
+      platformAdapter
     } = modules;
 
-    // Initialize components
-    const uiManager = new UIManager(themeManager);
-    const toolManager = new ToolManager(uiManager);
+    // Initialize components with platform adapter
+    const themeManager = await new ThemeManager(platformAdapter);
+    const uiManager = new UIManager(themeManager, platformAdapter);
+    const toolManager = new ToolManager(uiManager, platformAdapter);
     const mcpUI = new McpUI(themeManager);
     const mcpManager = new McpManager(toolManager, mcpUI, PageMcpClient);
 

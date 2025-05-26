@@ -567,7 +567,7 @@ class McpUI {
     
     // Add our ESC key listener
     this._escKeyListener = (event) => {
-      if (event.key === 'Escape' && this._activeModal) {
+      if (event.key && event.key === 'Escape' && this._activeModal) {
         console.log('📡 ESC key pressed, closing MCP config UI');
         this._closeActiveModal();
         event.preventDefault();
@@ -623,7 +623,8 @@ class McpUI {
     this._keyDownListener = (event) => {
       // On Mac: event.ctrlKey is true when Control key is pressed
       // Make sure to use lowercase for the key check to handle all cases
-      if (event.key.toLowerCase() === 'm' && event.ctrlKey) {
+      // Add safety check to ensure event.key exists before calling toLowerCase()
+      if (event.key && event.key.toLowerCase() === 'm' && event.ctrlKey) {
         console.log('📡 MCP keyboard shortcut detected', isMac ? 'on Mac' : 'on Windows/Linux');
         this._onShowServerConfigUI();
         // Prevent default browser behavior for this shortcut

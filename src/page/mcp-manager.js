@@ -197,7 +197,7 @@ class McpManager {
     this.activeFetch = true;
 
     try {
-      console.log('📡 Fetching MCP tool definitions...');
+      //console.log('📡 Fetching MCP tool definitions...');
 
       // Filter enabled servers
       const enabledServers = this.servers.filter(server => server.enabled);
@@ -213,7 +213,7 @@ class McpManager {
           // Try to fetch real tool definitions from the server
           try {
             toolDefinitions = await this.fetchToolsFromServer(server);
-            console.log(`📡 Successfully fetched ${toolDefinitions.length} tools from ${server.id}`);
+            //console.log(`📡 Successfully fetched ${toolDefinitions.length} tools from ${server.id}`);
           } catch (error) {
             console.error(`📡 Error fetching tools from server ${server.id}:`, error);
           }
@@ -239,7 +239,7 @@ class McpManager {
           });
 
 
-          console.log(`📡 Added ${toolDefinitions.length} tools for MCP server ${server.id}:`, tools);
+          //console.log(`📡 Added ${toolDefinitions.length} tools for MCP server ${server.id}:`, tools);
         } catch (error) {
           console.error(`📡 Error processing tools from MCP server ${server.id}:`, error);
         }

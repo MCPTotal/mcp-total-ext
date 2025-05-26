@@ -2,7 +2,9 @@
 // UIManager Class
 // ==============================
 class UIManager {
-  constructor(themeManager) {
+  constructor(themeManager, platformAdapter) {
+    this.platformAdapter = platformAdapter;
+    
     // Store tool automation preferences
     this.toolPreferences = {};
     // Load preferences from localStorage on initialization
@@ -10,28 +12,24 @@ class UIManager {
     
     // Initialize theme manager - first check if it's available globally
     this.themeManager = themeManager;
-    if (!this.themeManager) {
-      console.warn('🎨 ThemeManager not available, falling back to light theme');
-      // Fallback to light theme colors if theme manager is not available
-      this.colors = this._getFallbackColors();
-    } else {
-      // Use theme manager colors
-      this.colors = this.themeManager.getColors();
-      console.log('🎨 UIManager theme:', this.themeManager.getCurrentTheme());
+    this.colors = this.themeManager.getColors();
+    console.log('🎨 UIManager theme:', this.themeManager.getCurrentTheme());
       
-      // Register for theme changes to update our colors
-      this._themeUnsubscribe = this.themeManager.onThemeChange((theme, colors) => {
-        console.log(`🎨 UIManager received theme change: ${theme}`);
-        this.colors = colors;
-        this._onThemeChanged();
-      });
-    }
+    // Register for theme changes to update our colors
+    this._themeUnsubscribe = this.themeManager.onThemeChange((theme, colors) => {
+      console.log(`🎨 UIManager received theme change: ${theme}`);
+      this.colors = colors;
+      this._onThemeChanged();
+    });
   }
 
   /**
    * Handle theme changes by updating any active UI elements
    */
   _onThemeChanged() {
+    // Refresh colors from theme manager first
+    this.colors = this.themeManager?.getColors() || this._getFallbackColors();
+    
     // Re-apply styles to any existing tool result elements
     const toolResultElements = document.querySelectorAll('.tool-result-element');
     toolResultElements.forEach(element => {
@@ -53,9 +51,16 @@ class UIManager {
    */
   _updateElementTheme(element) {
     if (element.classList.contains('tool-result-element')) {
-      element.style.backgroundColor = this.colors.resultBackground;
-      element.style.borderColor = this.colors.resultBorder;
-      element.style.color = this.colors.resultText;
+      // Apply all theme colors with !important to override any conflicting styles
+      element.style.backgroundColor = `${this.colors.resultBackground} !important`;
+      element.style.borderColor = `${this.colors.resultBorder} !important`;
+      element.style.color = `${this.colors.resultText} !important`;
+      
+      // Force text color using specific attribute to override any platform styles
+      element.setAttribute('style', 
+        element.getAttribute('style') + 
+        `; color: ${this.colors.resultText} !important; text-color: ${this.colors.resultText} !important;`
+      );
     }
   }
 
@@ -104,42 +109,7 @@ class UIManager {
     
     console.log('🎨 Updated system prompt theme for', toggleButtons.length, 'toggles and', toolDefContainers.length, 'containers');
   }
-
-  /**
-   * Fallback colors for when theme manager is not available
-   */
-  _getFallbackColors() {
-    return {
-      primary: '#4b5563',
-      primaryLight: '#6b7280',
-      success: '#10b981',
-      successLight: '#34d399',
-      danger: '#ef4444',
-      dangerLight: '#f87171',
-      info: '#3b82f6',
-      infoLight: '#60a5fa',
-      purple: '#6d28d9',
-      purpleLight: '#7c3aed',
-      border: '#e5e7eb',
-      background: '#ffffff',
-      backgroundLight: '#f9fafb',
-      backgroundInput: '#f8f9fa',
-      backgroundModal: '#ffffff',
-      backgroundHover: '#f3f4f6',
-      text: '#1f2937',
-      textSecondary: '#6b7280',
-      textPlaceholder: '#9ca3af',
-      statusEnabled: '#10b981',
-      statusDisabled: '#ef4444',
-      highlightBg: '#f3f4f6',
-      highlightText: '#4f46e5',
-      resultBackground: '#f8f9fa',
-      resultBorder: '#e9ecef',
-      resultBorderHover: '#ced4da',
-      resultText: '#1f2937'
-    };
-  }
-
+  
   /**
    * Cleanup method to unsubscribe from theme changes
    */
@@ -557,6 +527,12 @@ class UIManager {
       transition: border-color 0.2s;
     `;
     
+    // Force text color using specific attribute to override any platform styles
+    resultElement.setAttribute('style', 
+      resultElement.getAttribute('style') + 
+      `; color: ${this.colors.resultText} !important; text-color: ${this.colors.resultText} !important;`
+    );
+    
     console.log('🎨 Tool result styling:', {
       theme: this.themeManager?.getCurrentTheme(),
       resultBackground: this.colors.resultBackground,
@@ -598,6 +574,12 @@ class UIManager {
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
       outline: none;
     `;
+    
+    // Force text color using specific attribute for textarea as well
+    editableResult.setAttribute('style', 
+      editableResult.getAttribute('style') + 
+      `; color: ${this.colors.resultText} !important; text-color: ${this.colors.resultText} !important;`
+    );
 
     // Make result clickable and toggle between view/edit modes
     resultElement.addEventListener('click', () => {
@@ -797,16 +779,16 @@ class UIManager {
       const placeholderId = `tool-placeholder-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       const placeholder = `<div id="${placeholderId}"></div>`;
 
-      console.log('=== Replacing tool call text:', toolCallText);
-      console.log('=== Tool call element:', toolCallElement);
+      //console.log('=== Replacing tool call text:', toolCallText);
+      //console.log('=== Tool call element:', toolCallElement);
       // Replace only the specific tool call text with the placeholder
       const safeToolCallText = toolCallText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex special chars
-      console.log('=== Safe tool call text:', safeToolCallText);
+      //console.log('=== Safe tool call text:', safeToolCallText);
       const newHTML = toolCallElement.innerHTML.replace(
         new RegExp(safeToolCallText, 'g'),
         placeholder
       );
-
+      
       // Update the element's HTML with the placeholder
       toolCallElement.innerHTML = newHTML;
 
@@ -866,10 +848,8 @@ class UIManager {
     try {
       console.log('📡 Sending tool result via UI for:', toolCall.tool);
 
-      // Find the contenteditable div that serves as the input field
-      const inputElement =
-        document.querySelector('div[contenteditable="true"]#prompt-textarea') ||
-        document.querySelector('div[contenteditable="true"]');
+      // Find the contenteditable div that serves as the input field using platform adapter
+      const inputElement = this.platformAdapter.getInputArea();
 
       // Format the result message with params included
       const paramsStr = this.formatParameters(toolCall.parameters);
@@ -937,8 +917,9 @@ class UIManager {
         font-size: 14px;
       `;
 
-      // Find the chat content area to inject the message
-      const chatContainer = document.querySelector('[role="main"]');
+      // Find the chat content area to inject the message using platform adapter
+      const chatContainer = this.platformAdapter.getMainContainer();
+      
       if (chatContainer) {
         chatContainer.prepend(errorDiv);
 

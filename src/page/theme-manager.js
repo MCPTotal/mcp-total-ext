@@ -3,23 +3,34 @@
  * Handles theme detection and color management for dark/light modes
  */
 class ThemeManager {
-  constructor() {
+  constructor(platformAdapter) {
+    this.platformAdapter = platformAdapter;
     this.currentTheme = 'light';
     this.themeChangeCallbacks = new Set();
     this.colors = this._getColorsForTheme(this.currentTheme);
     
     // Initialize theme detection
-    this._detectInitialTheme();
-    this._setupThemeListener();
+    // Observe changes to document.documentElement
+    const waitForBodyAndDocument = () => {
+        // Check if we have access to the document
+        if (typeof document === 'undefined' || !document.documentElement || !document.body) {
+        console.log('📡 Document not available yet, will try again in 500ms');
+        setTimeout(waitForBodyAndDocument, 500);
+        return;
+        }
+        this._detectInitialTheme();
+        this._setupThemeListener();
+    }
+    waitForBodyAndDocument();
   }
 
   /**
-   * Detect the initial theme based on ChatGPT's page context
+   * Detect the initial theme based on platform-specific context
    */
   _detectInitialTheme() {
     let detectedTheme = 'light'; // default fallback
 
-    if (this._detectChatGPTTheme()) {
+    if (this._detectTheme()) {
       detectedTheme = 'dark';
     }
 
@@ -29,21 +40,21 @@ class ThemeManager {
   }
 
   /**
-   * Detect ChatGPT's current theme by examining the page
+   * Detect current theme by examining the page
    */
-  _detectChatGPTTheme() {
+  _detectTheme() {
     try {
       // Check body or main container background colors
       const body = document.body;
       const bodyBg = window.getComputedStyle(body).backgroundColor;
-      console.log('🎨 Body background color:', bodyBg);
+      //console.log('🎨 Body background color:', bodyBg);
       
       if (this._isColorDark(bodyBg)) {
-        console.log('🎨 ChatGPT dark mode detected via body background color');
+        //console.log('🎨 Dark mode theme detected via body background color');
         return true;
       }
     } catch (error) {
-      console.warn('🎨 Error detecting ChatGPT theme:', error);
+      console.warn('🎨 Error detecting theme:', error);
     }
 
     return false;
@@ -109,45 +120,44 @@ class ThemeManager {
   }
 
   /**
-   * Setup listener for ChatGPT theme changes in page context
+   * Setup listener for platform-specific theme changes
    */
   _setupThemeListener() {
-    // Watch for changes to the html element's class list (where ChatGPT's dark class is applied)
+    // Watch for changes to the html element's class list
     if (typeof MutationObserver !== 'undefined') {
-      this._themeObserver = new MutationObserver((mutations) => {
-        let themeChanged = false;
-        
-        mutations.forEach((mutation) => {
-          if (mutation.type === 'attributes' && 
-              (mutation.attributeName === 'class' || mutation.attributeName === 'data-theme')) {
-            themeChanged = true;
-          }
+        this._themeObserver = new MutationObserver((mutations) => {
+            let themeChanged = false;
+            
+            mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && 
+                (mutation.attributeName === 'class' || mutation.attributeName === 'data-theme')) {
+                themeChanged = true;
+            }
+            });
+            
+            if (themeChanged) {
+            const newThemeIsDark = this._detectTheme();
+            const newTheme = newThemeIsDark ? 'dark' : 'light';
+            
+            if (newTheme !== this.currentTheme) {
+                console.log('🎨 Theme change detected via MutationObserver');
+                this._changeTheme(newTheme);
+            }
+            }
         });
         
-        if (themeChanged) {
-          const newThemeIsDark = this._detectChatGPTTheme();
-          const newTheme = newThemeIsDark ? 'dark' : 'light';
-          
-          if (newTheme !== this.currentTheme) {
-            console.log('🎨 ChatGPT theme change detected via MutationObserver');
-            this._changeTheme(newTheme);
-          }
-        }
-      });
-      
-      // Observe changes to document.documentElement
-      this._themeObserver.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ['class', 'data-theme']
-      });
-      
-      // Also observe body for theme changes
-      this._themeObserver.observe(document.body, {
-        attributes: true,
-        attributeFilter: ['class', 'data-theme']
-      });
-      
-      console.log('🎨 MutationObserver setup for ChatGPT theme changes');
+        // Observe changes to document.documentElement
+        this._themeObserver.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class', 'data-theme']
+        });
+        
+        // Also observe body for theme changes
+        this._themeObserver.observe(document.body, {
+            attributes: true,
+            attributeFilter: ['class', 'data-theme']
+        });
+        console.log('🎨 MutationObserver setup for theme changes');
     }
     
   }
@@ -169,6 +179,7 @@ class ThemeManager {
       }
     });
   }
+
   /**
    * Register a callback to be called when theme changes
    */
@@ -303,19 +314,13 @@ class ThemeManager {
 
 }
 
-// Create a singleton instance
-const themeManager = new ThemeManager();
-
 // Export for use in other modules
 /* eslint-disable no-undef */
 if (typeof exposeModule === 'function') {
-  exposeModule(themeManager);
+  exposeModule(ThemeManager);
 } else {
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = themeManager;
-  } else {
-    // Make it available globally for direct script inclusion
-    window.themeManager = themeManager;
+    module.exports = ThemeManager;
   }
 }
 
