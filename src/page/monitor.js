@@ -131,7 +131,6 @@
     }
 
 
-
     /* eslint-enable no-inner-declarations */
   } else {
     // Production mode - direct require approach

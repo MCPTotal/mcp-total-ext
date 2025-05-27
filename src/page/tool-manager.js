@@ -3,10 +3,10 @@
 // ==============================
 class ToolManager {
   // Static properties
-  static TOOL_PREFIX = "TOOL:"
-  static TOOL_PARAMS_PREFIX = "PARAMS:"
-  static SYSTEM_PROMPT_SEPARATOR = '===INSTRUCTIONS==='; // Add separator constant
-  static SYSTEM_PROMPT_SEPARATOR_END = '===END_INSTRUCTIONS===';
+  static TOOL_PREFIX = 'TOOL:';
+  static TOOL_PARAMS_PREFIX = 'PARAMS:';
+  static SYSTEM_PROMPT_SEPARATOR = '===TOOLS-INSTRUCTIONS==='; // Add separator constant
+  static SYSTEM_PROMPT_SEPARATOR_END = '===TOOLS-END===';
   static SYSTEM_PROMPT = `I have access to several tools, I can run for you when needed and reply with the result.
 To call a tool, reply to me with the following format:
 [TOOL_CALL]{"tool": "prefix-tool_name", "parameters": {"param1": "value1"}}[/TOOL_CALL].
@@ -33,6 +33,7 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
     
     // Track processed nodes to avoid duplication
     this.processedNodes = new WeakMap();
+    this.firstMessageSent = false;
 
     // Setup network interceptors
     this.setupNetworkInterceptors();
@@ -79,7 +80,8 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
         // If no matching tool or properties differ, tools have changed
         if (!existingTool || 
             existingTool.description !== newTool.description || 
-            JSON.stringify(existingTool.parameters || {}) !== JSON.stringify(newTool.parameters || {})) {
+            JSON.stringify(existingTool.parameters || {}) !== 
+              JSON.stringify(newTool.parameters || {})) {
           allMatch = false;
           break;
         }
@@ -95,7 +97,12 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
     console.log('📡 Updating tools with new list');
     this.toolDefinitions = [];
     for (const tool of tools) {
-      this.registerTool(tool.name, tool.description, tool.parameters, tool.callback);
+      this.registerTool(
+        tool.name, 
+        tool.description, 
+        tool.parameters, 
+        tool.callback
+      );
     }
     this.toolsDefinitionChanged = true;
     return true;
@@ -126,6 +133,7 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
     const toolCalls = [];
     let startIndex = 0;
     
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const start = text.indexOf('[TOOL_CALL]', startIndex);
       if (start === -1) break;
@@ -143,8 +151,8 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
             execute: () => this.executeToolCall(toolCall.tool, toolCall.parameters),
             toolCallText: text.slice(start, end + '[/TOOL_CALL]'.length)
           });
-          }
-        } catch (e) {
+        }
+      } catch (e) {
         console.error('📡 Error parsing tool call:', e);
       }
       
@@ -172,12 +180,13 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
         
         for (const mutation of mutations) {
 
-          let userMessage = this.platformAdapter.findUserMessageAncestor(mutation.target);
+          const userMessage = this.platformAdapter.findUserMessageAncestor(mutation.target);
           if (userMessage) {
             userNodesToProcess.add(userMessage);
           }
           else if (mutation.target.querySelectorAll) {
-            let userMessages = mutation.target.querySelectorAll(this.platformAdapter.getSelectors().userMessage);
+            const userMessages = 
+              mutation.target.querySelectorAll(this.platformAdapter.getSelectors().userMessage);
             if (userMessages.length > 0) {
               userMessages.forEach(message => {              
                 userNodesToProcess.add(message);
@@ -185,12 +194,15 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
             }
           }
           
-          let assistantMessage = this.platformAdapter.findAssistantMessageAncestor(mutation.target);
+          const assistantMessage = 
+            this.platformAdapter.findAssistantMessageAncestor(mutation.target);
           if (assistantMessage) {
             assistantNodesToProcess.add(assistantMessage);
           }
           else if (mutation.target.querySelector) {
-            let assistantMessages = mutation.target.querySelectorAll(this.platformAdapter.getSelectors().assistantMessage);
+            const assistantMessages = mutation.target.querySelectorAll(
+              this.platformAdapter.getSelectors().assistantMessage
+            );
             if (assistantMessages.length > 0) {
               assistantMessages.forEach(message => {              
                 assistantNodesToProcess.add(message);
@@ -198,19 +210,10 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
             }
           }
         }
-        assistantNodesToProcess.forEach(node => this.processAssistantMessage(node));
+        assistantNodesToProcess.forEach(node => this.processAssistantMessageForToolCalls(node));
         userNodesToProcess.forEach(node => this.processUserMessage(node));
       } catch (error) {
         console.error('📡 Error processing nodes:', error);
-      }
-      // Process queued nodes after a small delay
-      if (false) {//assistantNodesToProcess.size > 0 || userNodesToProcess.size > 0) {        
-        // Set a new timeout to process nodes after a delay
-        this.processingTimeout = setTimeout(() => {
-          console.log('📡 Processing queued nodes after delay:', assistantNodesToProcess.size, userNodesToProcess.size);
-          assistantNodesToProcess.forEach(node => this.processAssistantMessage(node));
-          userNodesToProcess.forEach(node => this.processUserMessage(node));
-        }, 10); // 10ms delay to ensure content is populated and to reduce cycles
       }
     });
     
@@ -224,8 +227,7 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
       }
       
       // Find the main container using platform adapter
-      let targetNode;
-      targetNode = document.body || document.documentElement;
+      const targetNode = document.body || document.documentElement;
       
       if (!targetNode) {
         console.log('📡 No valid target node found, will try again in 500ms');
@@ -235,11 +237,11 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
       
       try {
         // Process any existing assistant messages first using platform adapter
-        let existingMessages = this.platformAdapter.getAssistantMessages();
+        const existingMessages = this.platformAdapter.getAssistantMessages();
         console.log(`📡 Found ${existingMessages.length} existing assistant messages`);
-        existingMessages.forEach(message => this.processAssistantMessage(message));
+        existingMessages.forEach(message => this.processAssistantMessageForToolCalls(message));
         
-        let existingUserMessages = this.platformAdapter.getUserMessages();
+        const existingUserMessages = this.platformAdapter.getUserMessages();
         console.log(`📡 Found ${existingUserMessages.length} existing user messages`);
         existingUserMessages.forEach(message => this.processUserMessage(message));
         
@@ -250,7 +252,8 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
           characterData: true
         });
         
-        console.log(`📡 ***** Observer installed on ${targetNode.nodeName || 'unknown'} - watching for new messages`);
+        console.log(`📡 ***** Observer installed on ${
+          targetNode.nodeName || 'unknown'} - watching for new messages`);
       } catch (error) {
         console.error('📡 Error setting up observer:', error);
       }
@@ -270,9 +273,11 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
         const options = arguments[1] || {};
       
         // Check if this is a message creation request to append the system prompt
-        const isConversationRequest = self.platformAdapter.isConversationEndpoint(url, options.method);
+        const isConversationRequest = self.platformAdapter
+          .isConversationEndpoint(url, options.method);
         if (isConversationRequest) {
           try {
+            self.firstMessageSent = true;
             let bodyData = JSON.parse(options.body);
             //console.log("<<< ", bodyData);
             bodyData = self.injectSystemPrompt(bodyData);
@@ -307,10 +312,13 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
       const toolsDefinitions = this.getToolsDefinitions();      
       // Get system prompt configuration from platform adapter
       const systemPrompt = [ToolManager.SYSTEM_PROMPT, ...toolsDefinitions].join('\n\n');
-      const systemPromptWithSeparator = ToolManager.SYSTEM_PROMPT_SEPARATOR + systemPrompt + ToolManager.SYSTEM_PROMPT_SEPARATOR_END;
-      console.log('📡 Injecting system prompt' + (isFirstMessage ? '(first in conversation)' : '(has MCPT token)'));
+      const systemPromptWithSeparator = ToolManager.SYSTEM_PROMPT_SEPARATOR + 
+        systemPrompt + ToolManager.SYSTEM_PROMPT_SEPARATOR_END;
+      console.log('📡 Injecting system prompt' + 
+        (isFirstMessage ? '(first in conversation)' : '(has MCPT token)'));
       
-      bodyData = this.platformAdapter.appendSystemPrompt(bodyData, systemPromptWithSeparator, "MCPT");
+      bodyData = this.platformAdapter.appendSystemPrompt(
+        bodyData, systemPromptWithSeparator, 'MCPT');
 
       // Set flag to prevent multiple injections
       this.toolsDefinitionChanged = false;
@@ -331,7 +339,7 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
     });
   }
   
-   // Checks if a node has already been processed with the current content
+  // Checks if a node has already been processed with the current content
   hasProcessedNode(node) {
     if (!node) return false;
     
@@ -378,7 +386,7 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
     return null;
   }
 
-  processAssistantMessage(node) {
+  processAssistantMessageForToolCalls(node) {
     //console.log('**************** Processing assistant message:', node, node.textContent);
     // Skip if already processed
     if (this.hasProcessedNode(node)) {
@@ -391,7 +399,7 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
       // Process all child nodes first
       let processed = false;
       for (const childNode of node.childNodes) {
-        if (this.processAssistantMessage(childNode)) {
+        if (this.processAssistantMessageForToolCalls(childNode)) {
           processed = true;
         }
       }      
@@ -427,13 +435,20 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
         console.log('📡 Processing tool call in specific node:', toolCalls);
         
         // Find the best container for UI injection
-        let targetElement = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+        const targetElement = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
         
         // Inject UI
         requestAnimationFrame(() => {
-          console.log('****** Injecting tool result button for tool calls:', toolCalls, targetElement);
+          console.log('****** Injecting tool result button for tool calls:', 
+            toolCalls, targetElement);
           toolCalls.forEach(toolCall => {
-            this.uiManager.injectToolResultButton(toolCall, toolCall.execute, toolCall.toolCallText, targetElement);
+            this.uiManager.injectToolResultButton(
+              toolCall, 
+              toolCall.execute, 
+              toolCall.toolCallText, 
+              targetElement, 
+              this.firstMessageSent
+            );
           });
         });
         
@@ -442,7 +457,7 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
     }
     
     return false; // Return whether processing occurred
-  };
+  }
 
   // Add a new method to hide system prompts in user messages
   processUserMessage(userMessageNode) {
@@ -477,13 +492,37 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
           const toolDefinitions = parts[1].trim();
           
           // Update just this text node to remove the system prompt
-          deepestNode.textContent = userMessage;
-          
-          // Find parent element that will hold the toggle button
+          console.log('📡 Removing system prompt from user message:', deepestNode);
           let parentElement = deepestNode.parentElement;
+          if (deepestNode.nodeType === Node.TEXT_NODE) {
+            deepestNode.textContent = userMessage;
+          } else {
+            const separator = ToolManager.SYSTEM_PROMPT_SEPARATOR;
+            let found = false;
+            
+            const toRemove = [];
+            for (let i = 0; i < deepestNode.childNodes.length; i++) {
+              const child = deepestNode.childNodes[i];
+            
+              if (!found && child.textContent?.includes(separator)) {
+                found = true;
+              }
+              if (found) {
+                toRemove.push(child);
+              }
+            }
+            toRemove.forEach(child => child.remove());
+            parentElement = deepestNode;
+          }
+          console.log('📡 Removing system prompt from user message:', deepestNode);
           
           // Use UIManager to create theme-aware system prompt toggle
-          this.uiManager.createSystemPromptToggle(userMessage, toolDefinitions.replace(ToolManager.SYSTEM_PROMPT_SEPARATOR_END, ''), parentElement, deepestNode);
+          this.uiManager.createSystemPromptToggle(
+            userMessage, 
+            toolDefinitions.replace(ToolManager.SYSTEM_PROMPT_SEPARATOR_END, ''), 
+            parentElement, 
+            deepestNode
+          );
           
           console.log('📡 Hidden system prompt in user message:', userMessage.substring(0, 50));
           

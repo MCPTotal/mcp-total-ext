@@ -8,7 +8,7 @@ class McpUI {
     this._onShowServerConfigUI = null;
     this._activeModal = null; // Track the currently active modal
     this._escKeyListener = null; // Track ESC key listener
-    
+
     // Initialize theme manager - first check if it's available globally
     this.themeManager = themeManager;
     if (!this.themeManager) {
@@ -18,7 +18,7 @@ class McpUI {
     } else {
       // Use theme manager colors
       this.colors = this.themeManager.getColors();
-      
+
       // Register for theme changes to update our colors
       this._themeUnsubscribe = this.themeManager.onThemeChange((theme, colors) => {
         console.log(`🎨 McpUI received theme change: ${theme}`);
@@ -105,15 +105,15 @@ class McpUI {
       align-items: center;
       z-index: 10000;
     `;
-    
+
     // Store reference to active modal
     this._activeModal = modal;
-    
+
     // Detect if user is on Mac for shortcut display
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0 || 
-                 (navigator.userAgent.includes('Mac') && !navigator.userAgent.includes('Mobile'));
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0 ||
+      (navigator.userAgent.includes('Mac') && !navigator.userAgent.includes('Mobile'));
     const shortcutText = isMac ? 'Control+M' : 'Ctrl+M';
-    
+
     // Create modal content
     const modalContent = document.createElement('div');
     modalContent.style.cssText = `
@@ -127,7 +127,7 @@ class McpUI {
       overflow-y: auto;
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     `;
-    
+
     // Create heading
     const heading = document.createElement('h2');
     heading.textContent = 'MCP Server Configuration';
@@ -141,7 +141,7 @@ class McpUI {
       justify-content: space-between;
       align-items: center;
     `;
-    
+
     // Add keyboard shortcut hint
     const shortcutHint = document.createElement('span');
     shortcutHint.textContent = shortcutText;
@@ -154,17 +154,17 @@ class McpUI {
       border-radius: 4px;
     `;
     heading.appendChild(shortcutHint);
-    
+
     // Create server list
     const serverList = document.createElement('div');
     serverList.style.cssText = `
       margin-bottom: 15px;
     `;
-    
+
     // Function to render server list
     const renderServerList = () => {
       serverList.innerHTML = '';
-      
+
       if (this.mcpManager.servers.length === 0) {
         const emptyMsg = document.createElement('p');
         emptyMsg.textContent = 'No servers configured.';
@@ -187,7 +187,7 @@ class McpUI {
             background: ${server.enabled ? this.colors.backgroundLight : this.colors.backgroundModal};
             color: ${this.colors.text};
           `;
-          
+
           const serverInfo = document.createElement('div');
           serverInfo.innerHTML = `
             <div style="font-weight: bold;">${server.id}</div>
@@ -196,9 +196,9 @@ class McpUI {
               ${server.enabled ? '●' : '○'} ${server.enabled ? 'Enabled' : 'Disabled'}
             </div>
           `;
-          
+
           const actionButtons = document.createElement('div');
-          
+
           // Toggle button
           const toggleBtn = document.createElement('button');
           toggleBtn.textContent = server.enabled ? 'Disable' : 'Enable';
@@ -217,16 +217,18 @@ class McpUI {
             this.mcpManager.setServerStatus(server.id, !server.enabled);
             renderServerList();
           };
-          
+
           // Add hover effects for toggleBtn after creating it
           toggleBtn.addEventListener('mouseover', () => {
-            toggleBtn.style.backgroundColor = server.enabled ? this.colors.dangerLight : this.colors.successLight;
+            toggleBtn.style.backgroundColor = server.enabled ? 
+              this.colors.dangerLight : this.colors.successLight;
           });
-          
+
           toggleBtn.addEventListener('mouseout', () => {
-            toggleBtn.style.backgroundColor = server.enabled ? this.colors.danger : this.colors.success;
+            toggleBtn.style.backgroundColor = server.enabled ? 
+              this.colors.danger : this.colors.success;
           });
-          
+
           // Edit button
           const editBtn = document.createElement('button');
           editBtn.textContent = 'Edit';
@@ -244,16 +246,16 @@ class McpUI {
           editBtn.onclick = () => {
             showServerForm(server);
           };
-          
+
           // Add hover effects for editBtn after creating it
           editBtn.addEventListener('mouseover', () => {
             editBtn.style.backgroundColor = this.colors.infoLight;
           });
-          
+
           editBtn.addEventListener('mouseout', () => {
             editBtn.style.backgroundColor = this.colors.info;
           });
-          
+
           // Delete button
           const deleteBtn = document.createElement('button');
           deleteBtn.textContent = 'Delete';
@@ -273,27 +275,27 @@ class McpUI {
               renderServerList();
             }
           };
-          
+
           // Add hover effects for deleteBtn after creating it
           deleteBtn.addEventListener('mouseover', () => {
             deleteBtn.style.backgroundColor = this.colors.dangerLight;
           });
-          
+
           deleteBtn.addEventListener('mouseout', () => {
             deleteBtn.style.backgroundColor = this.colors.danger;
           });
-          
+
           actionButtons.appendChild(toggleBtn);
           actionButtons.appendChild(editBtn);
           actionButtons.appendChild(deleteBtn);
-          
+
           serverItem.appendChild(serverInfo);
           serverItem.appendChild(actionButtons);
           serverList.appendChild(serverItem);
         });
       }
     };
-    
+
     // Create "Add Server" button
     const addButton = document.createElement('button');
     addButton.textContent = 'Add New MCP Server';
@@ -309,16 +311,16 @@ class McpUI {
       margin-bottom: 20px;
       transition: background-color 0.2s ease;
     `;
-    
+
     // Add hover effects for addButton after creating it
     addButton.addEventListener('mouseover', () => {
       addButton.style.backgroundColor = this.colors.primaryLight;
     });
-    
+
     addButton.addEventListener('mouseout', () => {
       addButton.style.backgroundColor = this.colors.primary;
     });
-    
+
     // Create form container (initially hidden)
     const formContainer = document.createElement('div');
     formContainer.style.cssText = `
@@ -330,11 +332,11 @@ class McpUI {
       background: ${this.colors.backgroundLight};
       color: ${this.colors.text};
     `;
-    
+
     // Function to show server form
     const showServerForm = (serverToEdit = null) => {
       const isEditing = !!serverToEdit;
-      
+
       formContainer.innerHTML = `
         <h3 style="margin-top: 0; font-size: 16px; color: ${this.colors.text};">${isEditing ? 'Edit' : 'Add'} MCP Server</h3>
         
@@ -370,7 +372,7 @@ class McpUI {
         
         <div style="margin-bottom: 12px;">
           <label style="display: flex; align-items: center; cursor: pointer; color: ${this.colors.text};">
-            <input type="checkbox" id="server-enabled" ${isEditing && serverToEdit.enabled ? 'checked' : ''} 
+            <input type="checkbox" id="server-enabled" ${isEditing ? (serverToEdit.enabled ? 'checked' : '') : 'checked'} 
               style="margin-right: 6px;">
             <span>Enabled</span>
           </label>
@@ -385,21 +387,21 @@ class McpUI {
           </button>
         </div>
       `;
-      
+
       formContainer.style.display = 'block';
-      
+
       // Handle form submission
       document.getElementById('save-btn').onclick = async () => {
         const id = document.getElementById('server-id').value.trim();
         const url = document.getElementById('server-url').value.trim();
         const apiKey = document.getElementById('server-api-key').value.trim();
         const enabled = document.getElementById('server-enabled').checked;
-        
+
         if (!id || !url) {
           alert('Server ID and URL are required.');
           return;
         }
-        
+
         // Validate URL format
         try {
           new URL(url);
@@ -407,7 +409,7 @@ class McpUI {
           alert('Please enter a valid URL with protocol (e.g., https://example.com)');
           return;
         }
-        
+
         // Create server config object
         const serverConfig = {
           id,
@@ -415,15 +417,15 @@ class McpUI {
           apiKey,
           enabled
         };
-        
+
         // Add or update server
         await this.mcpManager.addServer(serverConfig);
-        
+
         // Hide form and refresh list
         formContainer.style.display = 'none';
         renderServerList();
       };
-      
+
       // Handle cancel
       document.getElementById('cancel-btn').onclick = () => {
         formContainer.style.display = 'none';
@@ -443,12 +445,12 @@ class McpUI {
         saveBtn.style.backgroundColor = this.colors.primary;
       });
     };
-    
+
     // Handle add button click
     addButton.onclick = () => {
       showServerForm();
     };
-    
+
     // Add close button
     const closeButton = document.createElement('button');
     closeButton.textContent = 'Close';
@@ -466,16 +468,16 @@ class McpUI {
     closeButton.onclick = () => {
       this._closeActiveModal();
     };
-    
+
     // Add hover effects for closeButton after creating it
     closeButton.addEventListener('mouseover', () => {
       closeButton.style.backgroundColor = this.colors.primaryLight;
     });
-    
+
     closeButton.addEventListener('mouseout', () => {
       closeButton.style.backgroundColor = this.colors.primary;
     });
-    
+
     // Add keyboard shortcut hint to close button
     const escHint = document.createElement('span');
     escHint.textContent = 'ESC';
@@ -488,7 +490,7 @@ class McpUI {
       font-family: monospace;
     `;
     closeButton.appendChild(escHint);
-    
+
     // Test connection button
     const testConnectionButton = document.createElement('button');
     testConnectionButton.textContent = 'Test All Connections';
@@ -508,36 +510,36 @@ class McpUI {
     testConnectionButton.onclick = async () => {
       testConnectionButton.textContent = 'Testing...';
       testConnectionButton.disabled = true;
-      
+
       // Test each enabled server
       const results = [];
       for (const server of this.mcpManager.servers.filter(s => s.enabled)) {
         try {
           testConnectionButton.textContent = `Testing ${server.id}...`;
           const tools = await this.mcpManager.testServerConnection(server);
-          const toolNames = tools.map(tool => tool.name).join(", ");
+          const toolNames = tools.map(tool => tool.name).join(', ');
           results.push(`✅ ${server.id}: ${tools.length} tools found (${toolNames})`);
         } catch (error) {
           results.push(`❌ ${server.id}: ${error.message}`);
         }
       }
-      
+
       // Display results
       alert('Connection Test Results:\n\n' + results.join('\n'));
-      
+
       testConnectionButton.textContent = 'Test All Connections';
       testConnectionButton.disabled = false;
     };
-    
+
     // Add hover effects for testConnectionButton after creating it
     testConnectionButton.addEventListener('mouseover', () => {
       testConnectionButton.style.backgroundColor = this.colors.successLight;
     });
-    
+
     testConnectionButton.addEventListener('mouseout', () => {
       testConnectionButton.style.backgroundColor = this.colors.success;
     });
-    
+
     // Assemble everything
     modalContent.appendChild(heading);
     modalContent.appendChild(addButton);
@@ -546,17 +548,17 @@ class McpUI {
     modalContent.appendChild(testConnectionButton);
     modalContent.appendChild(closeButton);
     modal.appendChild(modalContent);
-    
+
     // Initial render
     renderServerList();
-    
+
     // Add to body
     document.body.appendChild(modal);
-    
+
     // Setup ESC key handler
     this._setupEscKeyHandler();
   }
-  
+
   /**
    * Setup ESC key handler to close modal
    * @private
@@ -564,7 +566,7 @@ class McpUI {
   _setupEscKeyHandler() {
     // Remove any existing ESC key listener
     this._removeEscKeyListener();
-    
+
     // Add our ESC key listener
     this._escKeyListener = (event) => {
       if (event.key && event.key === 'Escape' && this._activeModal) {
@@ -573,10 +575,10 @@ class McpUI {
         event.preventDefault();
       }
     };
-    
+
     document.addEventListener('keydown', this._escKeyListener);
   }
-  
+
   /**
    * Remove ESC key listener
    * @private
@@ -587,7 +589,7 @@ class McpUI {
       this._escKeyListener = null;
     }
   }
-  
+
   /**
    * Close active modal if present
    * @private
@@ -610,15 +612,15 @@ class McpUI {
     }
 
     // Detect if user is on Mac
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0 || 
-                 (navigator.userAgent.includes('Mac') && !navigator.userAgent.includes('Mobile'));
-    
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0 ||
+      (navigator.userAgent.includes('Mac') && !navigator.userAgent.includes('Mobile'));
+
     // Define shortcut text for notification
     const shortcutText = isMac ? 'Control+M' : 'Ctrl+M';
-    
+
     // Remove any existing listeners first (just in case)
     this._removeExistingKeydownListeners();
-    
+
     // Add our keydown listener with a unique ID for potential cleanup
     this._keyDownListener = (event) => {
       // On Mac: event.ctrlKey is true when Control key is pressed
@@ -631,10 +633,10 @@ class McpUI {
         event.preventDefault();
       }
     };
-    
+
     document.addEventListener('keydown', this._keyDownListener);
     console.log('📡 Keyboard shortcut registered: ' + shortcutText);
-    
+
     // Show a temporary notification about the shortcut when first loaded
     setTimeout(() => {
       this.showShortcutNotification();
@@ -657,12 +659,12 @@ class McpUI {
    */
   showShortcutNotification() {
     // Detect if user is on Mac
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0 || 
-                 (navigator.userAgent.includes('Mac') && !navigator.userAgent.includes('Mobile'));
-    
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0 ||
+      (navigator.userAgent.includes('Mac') && !navigator.userAgent.includes('Mobile'));
+
     // Define shortcut text for notification
     const shortcutText = isMac ? 'Control+M' : 'Ctrl+M';
-    
+
     const notification = document.createElement('div');
     notification.style.cssText = `
       position: fixed;
@@ -680,7 +682,7 @@ class McpUI {
       opacity: 0;
       transform: translateY(20px);
     `;
-    
+
     notification.innerHTML = `
       <div style="display: flex; align-items: center; margin-bottom: 8px;">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">
@@ -697,64 +699,27 @@ class McpUI {
         Press <kbd style="background: rgba(255,255,255,0.2); padding: 2px 5px; border-radius: 3px; font-family: monospace;">ESC</kbd> to close the settings
       </div>
     `;
-    
+
     document.body.appendChild(notification);
-    
+
     // Show notification with animation after a short delay
     setTimeout(() => {
       notification.style.opacity = '1';
       notification.style.transform = 'translateY(0)';
     }, 100);
-    
+
     // Auto-hide after 8 seconds
     setTimeout(() => {
       notification.style.opacity = '0';
       notification.style.transform = 'translateY(20px)';
-      
+
       // Remove from DOM after animation completes
       setTimeout(() => {
-        document.body.removeChild(notification);
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
       }, 500);
     }, 8000);
-  }
-
-  /**
-   * Show a notification with a message
-   * @param {string} message - Message to display
-   */
-  showNotification(message) {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background: rgba(0, 0, 0, 0.75);
-      color: white;
-      padding: 12px 16px;
-      border-radius: 6px;
-      font-size: 14px;
-      z-index: 10000;
-      max-width: 300px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    `;
-    notification.textContent = message;
-    
-    document.body.appendChild(notification);
-    
-    // Auto-hide after 5 seconds
-    setTimeout(() => {
-      document.body.removeChild(notification);
-    }, 5000);
-  }
-
-  /**
-   * Show notification about keyboard shortcut
-   */
-  showServerSelectionNotification() {
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0 || 
-                 (navigator.userAgent.includes('Mac') && !navigator.userAgent.includes('Mobile'));
-    const shortcutText = isMac ? 'Control+M' : 'Ctrl+M';
-    this.showNotification(`Press ${shortcutText} to configure MCP servers`);
   }
 }
 
@@ -767,4 +732,4 @@ if (typeof exposeModule === 'function') {
     module.exports = McpUI;
   }
 }
-/* eslint-enable no-undef */ 
+/* eslint-enable no-undef */

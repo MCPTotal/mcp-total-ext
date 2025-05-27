@@ -106,7 +106,7 @@ class PlatformAdapter {
    */
   getInputArea() {
     const selector = this.config.selectors.inputArea;
-    let element = this._queryWithFallbacks(selector);
+    const element = this._queryWithFallbacks(selector);
     
     return element;
   }
@@ -144,15 +144,15 @@ class PlatformAdapter {
    */
   _queryAllWithFallbacks(selectorString) {
     const selectors = selectorString.split(',').map(s => s.trim());
-    let foundElements = new Set();
+    const foundElements = new Set();
     
     for (const selector of selectors) {
       try {
         const elements = document.querySelectorAll(selector);
         if (elements.length > 0) {
-            // For other platforms, add elements directly
-            elements.forEach(element => foundElements.add(element));
-            break;
+          // For other platforms, add elements directly
+          elements.forEach(element => foundElements.add(element));
+          break;
         }
       } catch (e) {
         console.warn(`🌐 Invalid selector: ${selector}`, e);
@@ -194,7 +194,7 @@ class PlatformAdapter {
     
     // Standard traversal for other platforms
     while (current && !this.isUserMessage(current)) {
-        current = current.parentElement;
+      current = current.parentElement;
     }
     
     return current;
@@ -208,7 +208,7 @@ class PlatformAdapter {
     
     // Standard traversal for other platforms
     while (current && !this.isAssistantMessage(current)) {
-        current = current.parentElement;
+      current = current.parentElement;
     }
     
     return current;
@@ -217,12 +217,12 @@ class PlatformAdapter {
 
   hasExplicitToken(bodyData) {
     if (this.platform === 'chatgpt') {
-        return bodyData.messages.some(msg => 
-            msg.author?.role === 'user' && 
-            msg.content?.parts?.[0]?.includes("MCPT")
-          ) || false;
+      return bodyData.messages.some(msg => 
+        msg.author?.role === 'user' && 
+            msg.content?.parts?.[0]?.includes('MCPT')
+      ) || false;
     } else if (this.platform === 'claude') {
-      return bodyData.prompt.includes("MCPT");
+      return bodyData.prompt.includes('MCPT');
     }
   }
 
@@ -232,22 +232,22 @@ class PlatformAdapter {
   appendSystemPrompt(bodyData, systemPromptWithSeparator, toRemoveToken) {
     let userContent = '';
     if (this.platform === 'chatgpt') {
-        const firstMessage = bodyData.messages.find(msg => msg.author.role === 'user');
-        if (firstMessage) {          
-            // Append our system prompt to the end of the user message
-            // Remove MCPT token if present
-            userContent = firstMessage.content.parts[0];
-            if (toRemoveToken) {
-                userContent = userContent.replace(toRemoveToken, "").trim();
-            }
-            firstMessage.content.parts[0] = userContent + "\n\n" + systemPromptWithSeparator;  
-        }
-    } else if (this.platform === 'claude') {
-        userContent = bodyData.prompt;
+      const firstMessage = bodyData.messages.find(msg => msg.author.role === 'user');
+      if (firstMessage) {          
+        // Append our system prompt to the end of the user message
+        // Remove MCPT token if present
+        userContent = firstMessage.content.parts[0];
         if (toRemoveToken) {
-            userContent = userContent.replace(toRemoveToken, "").trim();
+          userContent = userContent.replace(toRemoveToken, '').trim();
         }
-        bodyData.prompt = userContent + "\n\n" + systemPromptWithSeparator;      
+        firstMessage.content.parts[0] = userContent + '\n\n' + systemPromptWithSeparator;  
+      }
+    } else if (this.platform === 'claude') {
+      userContent = bodyData.prompt;
+      if (toRemoveToken) {
+        userContent = userContent.replace(toRemoveToken, '').trim();
+      }
+      bodyData.prompt = userContent + '\n\n' + systemPromptWithSeparator;      
         
     }
     return bodyData;

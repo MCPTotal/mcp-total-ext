@@ -12,15 +12,15 @@ class ThemeManager {
     // Initialize theme detection
     // Observe changes to document.documentElement
     const waitForBodyAndDocument = () => {
-        // Check if we have access to the document
-        if (typeof document === 'undefined' || !document.documentElement || !document.body) {
+      // Check if we have access to the document
+      if (typeof document === 'undefined' || !document.documentElement || !document.body) {
         console.log('📡 Document not available yet, will try again in 500ms');
         setTimeout(waitForBodyAndDocument, 500);
         return;
-        }
-        this._detectInitialTheme();
-        this._setupThemeListener();
-    }
+      }
+      this._detectInitialTheme();
+      this._setupThemeListener();
+    };
     waitForBodyAndDocument();
   }
 
@@ -125,39 +125,39 @@ class ThemeManager {
   _setupThemeListener() {
     // Watch for changes to the html element's class list
     if (typeof MutationObserver !== 'undefined') {
-        this._themeObserver = new MutationObserver((mutations) => {
-            let themeChanged = false;
+      this._themeObserver = new MutationObserver((mutations) => {
+        let themeChanged = false;
             
-            mutations.forEach((mutation) => {
-            if (mutation.type === 'attributes' && 
+        mutations.forEach((mutation) => {
+          if (mutation.type === 'attributes' && 
                 (mutation.attributeName === 'class' || mutation.attributeName === 'data-theme')) {
-                themeChanged = true;
-            }
-            });
+            themeChanged = true;
+          }
+        });
             
-            if (themeChanged) {
-            const newThemeIsDark = this._detectTheme();
-            const newTheme = newThemeIsDark ? 'dark' : 'light';
+        if (themeChanged) {
+          const newThemeIsDark = this._detectTheme();
+          const newTheme = newThemeIsDark ? 'dark' : 'light';
             
-            if (newTheme !== this.currentTheme) {
-                console.log('🎨 Theme change detected via MutationObserver');
-                this._changeTheme(newTheme);
-            }
-            }
-        });
+          if (newTheme !== this.currentTheme) {
+            console.log('🎨 Theme change detected via MutationObserver');
+            this._changeTheme(newTheme);
+          }
+        }
+      });
         
-        // Observe changes to document.documentElement
-        this._themeObserver.observe(document.documentElement, {
-            attributes: true,
-            attributeFilter: ['class', 'data-theme']
-        });
+      // Observe changes to document.documentElement
+      this._themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['class', 'data-theme']
+      });
         
-        // Also observe body for theme changes
-        this._themeObserver.observe(document.body, {
-            attributes: true,
-            attributeFilter: ['class', 'data-theme']
-        });
-        console.log('🎨 MutationObserver setup for theme changes');
+      // Also observe body for theme changes
+      this._themeObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['class', 'data-theme']
+      });
+      console.log('🎨 MutationObserver setup for theme changes');
     }
     
   }

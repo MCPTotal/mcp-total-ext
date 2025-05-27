@@ -7,11 +7,13 @@
 function testPlatformAdapter() {
   console.log('🧪 Testing Platform Adapter...');
   
+  // eslint-disable-next-line no-undef
   if (typeof platformAdapter === 'undefined') {
     console.error('❌ Platform adapter not available');
     return;
   }
 
+  // eslint-disable-next-line no-undef
   const adapter = platformAdapter;
   
   // Test platform detection
@@ -104,12 +106,15 @@ function testPlatformAdapter() {
 function testNetworkInterception() {
   console.log('🧪 Testing Network Interception...');
   
+  // eslint-disable-next-line no-undef
   if (typeof toolManager === 'undefined') {
     console.error('❌ Tool manager not available');
     return;
   }
   
+  // eslint-disable-next-line no-unused-vars, no-undef
   const manager = toolManager;
+  // eslint-disable-next-line no-undef
   const adapter = platformAdapter;
   
   if (!adapter) {
@@ -151,6 +156,7 @@ function testNetworkInterception() {
 
 // Also provide a quick status check
 function checkPlatformStatus() {
+  // eslint-disable-next-line no-undef
   const adapter = platformAdapter;
   
   if (!adapter) {
@@ -165,21 +171,21 @@ function checkPlatformStatus() {
     assistantMessages: adapter.getAssistantMessages().length,
     inputArea: !!adapter.getInputArea(),
   };
-}; 
+} 
 
 function main() {
-    console.log(" -- Running platform tests --");
-    testPlatformAdapter();
-    console.log(" -- Running network interception tests --");
-    testNetworkInterception();
-    console.log(" -- Running platform status check --");
-    checkPlatformStatus();
-    console.log(" -- Platform tests completed --");
+  console.log(' -- Running platform tests --');
+  testPlatformAdapter();
+  console.log(' -- Running network interception tests --');
+  testNetworkInterception();
+  console.log(' -- Running platform status check --');
+  checkPlatformStatus();
+  console.log(' -- Platform tests completed --');
 }
 
 const paltformTest = {
-    main,
-  };
+  main,
+};
   
 // Export for use in other modules
 /* eslint-disable no-undef */

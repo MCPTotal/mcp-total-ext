@@ -51,16 +51,30 @@ class UIManager {
    */
   _updateElementTheme(element) {
     if (element.classList.contains('tool-result-element')) {
-      // Apply all theme colors with !important to override any conflicting styles
-      element.style.backgroundColor = `${this.colors.resultBackground} !important`;
-      element.style.borderColor = `${this.colors.resultBorder} !important`;
-      element.style.color = `${this.colors.resultText} !important`;
-      
-      // Force text color using specific attribute to override any platform styles
-      element.setAttribute('style', 
-        element.getAttribute('style') + 
-        `; color: ${this.colors.resultText} !important; text-color: ${this.colors.resultText} !important;`
-      );
+      // Check if this is a textarea (editable) or other element (read-only)
+      if (element.tagName.toLowerCase() === 'textarea') {
+        // For textarea, use input colors for better contrast
+        element.style.backgroundColor = `${this.colors.backgroundInput} !important`;
+        element.style.borderColor = `${this.colors.resultBorder} !important`;
+        element.style.color = `${this.colors.text} !important`;
+        
+        // Force text color using specific attribute to override any platform styles
+        element.setAttribute('style', 
+          element.getAttribute('style') + 
+          `; color: ${this.colors.text} !important; text-color: ${this.colors.text} !important;`
+        );
+      } else {
+        // For read-only elements, use result colors
+        element.style.backgroundColor = `${this.colors.resultBackground} !important`;
+        element.style.borderColor = `${this.colors.resultBorder} !important`;
+        element.style.color = `${this.colors.resultText} !important`;
+        
+        // Force text color using specific attribute to override any platform styles
+        element.setAttribute('style', 
+          element.getAttribute('style') + 
+          `; color: ${this.colors.resultText} !important; text-color: ${this.colors.resultText} !important;`
+        );
+      }
     }
   }
 
@@ -255,7 +269,7 @@ class UIManager {
     const currentMode = currentToolPrefs.mode || 'manual';
 
     // Use smaller icon size for a more compact look
-    const iconSize = "12";
+    const iconSize = '12';
     
     // Create the three mode buttons with smaller icons
     const manualButton = this.createModeButton(
@@ -330,7 +344,8 @@ class UIManager {
 
     // Add hover effect
     button.addEventListener('mouseover', () => {
-      button.style.backgroundColor = isSelected ? this.colors.highlightBg : this.colors.backgroundHover;
+      button.style.backgroundColor = isSelected ? 
+        this.colors.highlightBg : this.colors.backgroundHover;
     });
 
     button.addEventListener('mouseout', () => {
@@ -480,7 +495,7 @@ class UIManager {
     }
   }
 
-  drawToolResultButton(toolCall, executeToolCall, toolCallText, toolCallElement) {
+  drawToolResultButton(toolCall, executeToolCall, toolCallText, toolCallElement, canAutoRun) {
 
     if (!toolCallElement) {
       console.log('📡 Could not find tool call text element');
@@ -553,9 +568,9 @@ class UIManager {
     const editableResult = document.createElement('textarea');
     editableResult.className = 'tool-result-element'; // Add class for theme updates
     editableResult.style.cssText = `
-      background-color: ${this.colors.resultBackground} !important;
+      background-color: ${this.colors.backgroundInput} !important;
       border: 1px solid ${this.colors.resultBorder} !important;
-      color: ${this.colors.resultText} !important;
+      color: ${this.colors.text} !important;
       border-radius: 6px;
       padding: 10px;
       margin-top: 8px;
@@ -578,7 +593,7 @@ class UIManager {
     // Force text color using specific attribute for textarea as well
     editableResult.setAttribute('style', 
       editableResult.getAttribute('style') + 
-      `; color: ${this.colors.resultText} !important; text-color: ${this.colors.resultText} !important;`
+      `; color: ${this.colors.text} !important; text-color: ${this.colors.text} !important;`
     );
 
     // Make result clickable and toggle between view/edit modes
@@ -821,23 +836,25 @@ class UIManager {
     }
 
     // Auto-run the tool if preferences are set
-    const savedToolPrefs = this.getToolPreference(toolCall.tool);
-    if (savedToolPrefs.mode === 'autorun' || savedToolPrefs.mode === 'autosend') {
-      console.log(`📡 Auto-running tool ${toolCall.tool} (mode: ${savedToolPrefs.mode})`);
-      // Execute with a slight delay to allow the UI to render first
-      setTimeout(() => {
-        // This would trigger the tool button click
-        console.log(`📡 Auto-executing tool ${toolCall.tool}`);
-        toolButton.click();
-      }, 500);
+    if (canAutoRun) {
+      const savedToolPrefs = this.getToolPreference(toolCall.tool);
+      if (savedToolPrefs.mode === 'autorun' || savedToolPrefs.mode === 'autosend') {
+        console.log(`📡 Auto-running tool ${toolCall.tool} (mode: ${savedToolPrefs.mode})`);
+        // Execute with a slight delay to allow the UI to render first
+        setTimeout(() => {
+          // This would trigger the tool button click
+          console.log(`📡 Auto-executing tool ${toolCall.tool}`);
+          toolButton.click();
+        }, 500);
+      }
     }
   }
 
   // Inject a button into the UI to send the tool result
-  injectToolResultButton(toolCall, executeToolCall, toolCallText, element) {
+  injectToolResultButton(toolCall, executeToolCall, toolCallText, element, canAutoRun = false) {
     try {
       console.log(`📡 Injecting button for tool: ${toolCall.tool}`);
-      this.drawToolResultButton(toolCall, executeToolCall, toolCallText, element);
+      this.drawToolResultButton(toolCall, executeToolCall, toolCallText, element, canAutoRun);
     } catch (e) {
       console.error('📡 Error injecting button:', e);
     }

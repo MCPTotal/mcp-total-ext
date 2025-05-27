@@ -215,7 +215,7 @@ class McpManager {
             toolDefinitions = await this.fetchToolsFromServer(server);
             //console.log(`📡 Successfully fetched ${toolDefinitions.length} tools from ${server.id}`);
           } catch (error) {
-            console.error(`📡 Error fetching tools from server ${server.id}:`, error);
+            console.warn(`📡 Error fetching tools from server ${server.id}:`, error);
           }
 
 
@@ -301,7 +301,7 @@ class McpManager {
         parameters: this.convertToolParameters(tool.inputSchema)
       }));
     } catch (error) {
-      console.error(`📡 Error fetching tools from ${server.url}:`, error);
+      console.warn(`📡 Error fetching tools from ${server.url}:`, error);
       throw error;
     }
   }
@@ -366,12 +366,6 @@ class McpManager {
     } catch (error) {
       console.error(`📡 Error executing tool on ${server.url}:`, error);
       throw error;
-    }
-  }
-
-  showServerSelectionNotification() {
-    if (this.ui) {
-      this.ui.showServerSelectionNotification();
     }
   }
 }
