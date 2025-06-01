@@ -1,6 +1,9 @@
 // ==============================
 // McpManager Class
 // ==============================
+
+const SERVER_PREFIX = 'MCPT:';
+
 class McpManager {
   constructor(toolManager, mcpUI, pageMcpClient) {
     this.toolManager = toolManager;
@@ -30,6 +33,59 @@ class McpManager {
     
     // Load saved servers from storage
     this.loadServers();
+    const self = this;
+
+    window.addEventListener('message', function (event) {
+      if (event.data && event.data.type === 'MCPT_SERVERS_UPDATED') {
+        //console.log('🔍 Received MCP servers update:', event.data.servers);
+        self.mergeMCPTServers(event.data.servers);
+      }
+    });
+  }
+
+  mergeMCPTServers(servers) {
+    // Update the servers list with the new MCPT servers, keeping enabled status for existing one, and adding new ones as disabled
+    const nonMcptServers = this.servers.filter(server => !server.id.startsWith(SERVER_PREFIX));
+    const updatedMcptServers = servers.filter(server => 
+      this.servers.some(existingServer => SERVER_PREFIX + server.name === existingServer.id)
+    ).map(server => {
+      const existingServer = this.servers.find(
+        existingServer => SERVER_PREFIX + server.name === existingServer.id);
+      return {
+        ...existingServer,
+        id: SERVER_PREFIX + server.name,
+        url: server.endpoint + '/mcp',
+        apiKey: server.key,
+      };
+    });
+    const newMcptServers = servers
+      .filter(newServer => !this.servers.some(existingServer => 
+        existingServer.id === SERVER_PREFIX + newServer.name
+      )).map(server => ({
+        id: SERVER_PREFIX + server.name,
+        url: server.endpoint + '/mcp',
+        apiKey: server.key,
+        enabled: true
+      }));
+
+    this.serversNew = [...nonMcptServers, ...updatedMcptServers, ...newMcptServers];
+    // Check if there are any changes between this.serversNew and this.servers
+    const hasChanges = this.serversNew.length !== this.servers.length || 
+      this.serversNew.some((newServer, index) => 
+        JSON.stringify(newServer) !== JSON.stringify(this.servers[index])
+      );
+
+    if (hasChanges) {
+      console.log('📡 Server configuration has changed');
+      this.servers = this.serversNew;
+      // Save changes to storage
+      this.saveServers();
+
+      // Refresh tool definitions
+      this.fetchToolsDefinitions();
+      
+    }
+
   }
 
   /**
@@ -81,7 +137,6 @@ class McpManager {
   }
 
   async addServer(serverConfig) {
-
     // Request permission for the server URL
     const serverUrl = new URL(serverConfig.url);
     console.log(`Requesting permission for ${serverUrl}`, serverConfig);

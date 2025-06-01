@@ -33,7 +33,7 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
     
     // Track processed nodes to avoid duplication
     this.processedNodes = new WeakMap();
-    this.firstMessageSent = false;
+    this.firstMessageUrl = null; // Store URL where first message was sent
 
     // Setup network interceptors
     this.setupNetworkInterceptors();
@@ -277,7 +277,7 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
           .isConversationEndpoint(url, options.method);
         if (isConversationRequest) {
           try {
-            self.firstMessageSent = true;
+            self.lastMessageUrl = window.location.href;
             let bodyData = JSON.parse(options.body);
             //console.log("<<< ", bodyData);
             bodyData = self.injectSystemPrompt(bodyData);
@@ -447,7 +447,7 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
               toolCall.execute, 
               toolCall.toolCallText, 
               targetElement, 
-              this.firstMessageSent
+              window.location.href === this.lastMessageUrl
             );
           });
         });
@@ -492,7 +492,7 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
           const toolDefinitions = parts[1].trim();
           
           // Update just this text node to remove the system prompt
-          console.log('📡 Removing system prompt from user message:', deepestNode);
+          console.log('📡 Removing system prompt from user message:', deepestNode, userMessage, deepestNode.textContent);
           let parentElement = deepestNode.parentElement;
           if (deepestNode.nodeType === Node.TEXT_NODE) {
             deepestNode.textContent = userMessage;
@@ -503,18 +503,25 @@ Always use the above format, including the TOOL_CALL tags and the tool name.
             const toRemove = [];
             for (let i = 0; i < deepestNode.childNodes.length; i++) {
               const child = deepestNode.childNodes[i];
+              if (found) {
+                toRemove.push(child);
+              }
             
               if (!found && child.textContent?.includes(separator)) {
                 found = true;
               }
-              if (found) {
+              // if the child text content starts with the separator, remove it
+              if (child.textContent?.startsWith(separator)) {
                 toRemove.push(child);
+              } else {
+                // if the child text has user message before the separator, keep only it
+                child.textContent = child.textContent.split(separator)[0];
               }
             }
             toRemove.forEach(child => child.remove());
             parentElement = deepestNode;
           }
-          console.log('📡 Removing system prompt from user message:', deepestNode);
+          console.log('📡 Post removal user message:', deepestNode, deepestNode.textContent);
           
           // Use UIManager to create theme-aware system prompt toggle
           this.uiManager.createSystemPromptToggle(

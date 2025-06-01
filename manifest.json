@@ -1,8 +1,11 @@
 {
   "name": "MCPTotal",
-  "description": "Connect ChatGPT to your own AI tools using Model Context Protocol (MCP) – extend ChatGPT with custom capabilities",
-  "version": "1.0.0",
+  "description": "MCPTotal: Supercharge Your AI Chats With Tools. Instantly.",
+  "version": "1.1.0",
   "manifest_version": 3,
+  "permissions": [
+    "storage"
+  ],
   "background": {
     "service_worker": "src/background/background.js",
     "type": "module"
@@ -11,7 +14,8 @@
     {
       "matches": [
         "https://chatgpt.com/*",
-        "https://claude.ai/*"
+        "https://claude.ai/*",
+        "https://mcptotal.io/*"
       ],
       "js": [
         "src/content/content.js",
@@ -19,6 +23,9 @@
       ],
       "run_at": "document_start"
     }
+  ],
+  "host_permissions": [
+    "https://mcp.mcptotal.io/*"
   ],
   "optional_host_permissions": [
     "http://*/*",
@@ -39,6 +46,12 @@
       "matches": [
         "https://chatgpt.com/*",
         "https://claude.ai/*"
+      ]
+    },
+    {
+      "resources": ["src/mcptotal/*"],
+      "matches": [
+        "https://mcptotal.io/*"
       ]
     }
   ]

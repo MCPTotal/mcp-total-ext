@@ -29,8 +29,6 @@ class BrowserMcpClient {
     }
 
     try {
-      // Create base URL object
-      const url = new URL(this.serverUrl);
       
       // Try StreamableHTTP first
       try {
@@ -39,14 +37,10 @@ class BrowserMcpClient {
           name: 'browser-mcp-client',
           version: '1.0.0'
         });
-        
-        // For StreamableHTTP, we use proper Authorization headers (preferred method)
-        const headers = {};
-        if (this.authToken) {
-          headers['Authorization'] = `Bearer ${this.authToken}`;
-        }
-        
-        this.transport = new StreamableHTTPClientTransport(url, { headers });
+        // Create base URL object
+        const url = new URL(this.serverUrl);
+        url.searchParams.set('key', this.authToken);
+        this.transport = new StreamableHTTPClientTransport(url);
 
         // Connect to the server
         await this.client.connect(this.transport);
@@ -70,7 +64,7 @@ class BrowserMcpClient {
         // This is because browser's native EventSource API doesn't support custom headers
         const sseUrl = new URL(this.serverUrl);
         if (this.authToken) {
-          sseUrl.searchParams.set('authorization', `Bearer ${this.authToken}`);
+          sseUrl.searchParams.set('key', `${this.authToken}`);
         }
         
         // Create SSE transport

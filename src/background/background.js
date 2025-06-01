@@ -7,28 +7,57 @@ const MCPClient = globalThis.MCPClient ||  MCPClientModule;
 // Store active MCP clients
 const mcpClients = new Map();
 
-// Handle messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Only process MCP messages
-  if (!message || message.type !== 'MCP_REQUEST') {
-    return false;
+  if (message.type === 'STORE_MCPT_SERVERS') {
+    (async () => {
+      try {
+        const response = await handleStoreMcpServers(message.servers, message.source);
+        sendResponse({ success: true, result: response });
+      } catch (error) {
+        console.error('Store MCP servers error:', error);
+        sendResponse({ 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        });
+      }
+    })();
+    return true; // ✅ Required to keep sendResponse alive
   }
-  
-  // Process the request
-  handleMcpRequest(message.action, message.params)
-    .then(response => {
-      sendResponse({ success: true, result: response });
-    })
-    .catch(error => {
-      console.error('MCP request error:', error);
-      sendResponse({ 
-        success: false, 
-        error: error instanceof Error ? error.message : String(error) 
-      });
-    });
-  
-  // Keep messaging channel open for async response
-  return true;
+
+  if (message.type === 'GET_STORED_MCPT_SERVERS') {
+    (async () => {
+      try {
+        const servers = await getStoredMcpServers();
+        console.log('🔍 Stored MCP servers2:', servers);
+        sendResponse({ success: true, servers });
+      } catch (error) {
+        console.error('Get stored MCP servers error:', error);
+        sendResponse({ 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        });
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === 'MCP_REQUEST') {
+    (async () => {
+      try {
+        const response = await handleMcpRequest(message.action, message.params);
+        sendResponse({ success: true, result: response });
+      } catch (error) {
+        console.error('MCP request error:', error);
+        sendResponse({ 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        });
+      }
+    })();
+    return true;
+  }
+
+  return false;
 });
 
 // Process MCP API requests
@@ -153,5 +182,74 @@ async function callMcpTool(clientId, toolName, toolArguments) {
   } catch (error) {
     console.error(`Error calling MCP tool ${toolName}:`, error);
     throw error;
+  }
+}
+
+// Handle storing MCP server configurations
+async function handleStoreMcpServers(servers, source) {
+  if (!Array.isArray(servers)) {
+    throw new Error('Servers must be an array');
+  }
+
+  try {
+    // Get existing servers from storage
+    await chrome.storage.local.set({ mcptServers: servers });
+
+    console.log(`Background: Stored ${servers.length} MCP servers from ${source}`);
+
+    // Broadcast update to all content scripts
+    await broadcastMcpServerUpdate(servers, source);
+
+    return { 
+      stored: servers.length, 
+      total: servers.length,
+      source 
+    };
+  } catch (error) {
+    console.error('Error storing MCP servers:', error);
+    throw error;
+  }
+}
+
+// Broadcast MCP server updates to all content scripts
+async function broadcastMcpServerUpdate(servers, source) {
+  try {
+    console.log(`Background: Broadcasting MCP server update from ${source}`, servers);
+    
+    // Get all tabs and send message to each content script
+    chrome.tabs.query({
+      url: ['https://chatgpt.com/*', 'https://claude.ai/*']
+    }, (tabs) => {
+      tabs.forEach(tab => {
+        chrome.tabs.sendMessage(tab.id, {
+          type: 'MCPT_SERVERS_UPDATED',
+          servers,
+          source
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.warn(`Background: Failed to send to tab ${tab.id}: ${chrome.runtime.lastError.message}`);
+          } else {
+            console.log(`✅ Message delivered to tab ${tab.id}`, response);
+          }
+        });
+      });
+    });
+    
+    console.log('Background: Broadcasted MCP server update (chrome.runtime)');
+  } catch (error) {
+    console.error('Error broadcasting MCP server update:', error);
+    throw error;
+  }
+}
+
+// Get stored MCP servers (utility function for other parts of the extension)
+async function getStoredMcpServers() {
+  try {
+    const data = await chrome.storage.local.get(['mcptServers']);
+    console.log('🔍 Stored MCP servers1:', data);
+    return data.mcptServers || [];
+  } catch (error) {
+    console.error('Error getting stored MCP servers:', error);
+    return [];
   }
 } 
