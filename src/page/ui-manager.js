@@ -502,7 +502,7 @@ class UIManager {
 
     if (!toolCallElement) {
       console.log('📡 Could not find tool call text element');
-      return;
+      return false;
     }
 
     // Format parameters for display
@@ -838,10 +838,13 @@ class UIManager {
       toolCallElement.appendChild(toolsContainer);
     }
 
+    let ran = false;
+
     // Auto-run the tool if preferences are set
     if (canAutoRun) {
       const savedToolPrefs = this.getToolPreference(toolCall.tool);
       if (savedToolPrefs.mode === 'autorun' || savedToolPrefs.mode === 'autosend') {
+        ran = true;
         console.log(`📡 Auto-running tool ${toolCall.tool} (mode: ${savedToolPrefs.mode})`);
         // Execute with a slight delay to allow the UI to render first
         setTimeout(() => {
@@ -851,13 +854,16 @@ class UIManager {
         }, 500);
       }
     }
+
+    return ran;
   }
 
   // Inject a button into the UI to send the tool result
   injectToolResultButton(toolCall, executeToolCall, toolCallText, element, canAutoRun = false) {
     try {
       console.log(`📡 Injecting button for tool: ${toolCall.tool}`, canAutoRun);
-      this.drawToolResultButton(toolCall, executeToolCall, toolCallText, element, canAutoRun);
+      return this.drawToolResultButton(
+        toolCall, executeToolCall, toolCallText, element, canAutoRun);
     } catch (e) {
       console.error('📡 Error injecting button:', e);
     }
@@ -1067,9 +1073,9 @@ class UIManager {
     // Create image element for the icon
     const iconImg = document.createElement('img');
     iconImg.style.cssText = `
-      width: 50px;
-      height: 50px;
-      border-radius: 25px;
+      width: 40px;
+      height: 40px;
+      border-radius: 20px;
       pointer-events: none;
       object-fit: cover;
     `;
@@ -1085,9 +1091,9 @@ class UIManager {
       position: fixed;
       bottom: 20px;
       right: 20px;
-      width: 50px;
-      height: 50px;
-      border-radius: 25px;
+      width: 40px;
+      height: 40px;
+      border-radius: 20px;
       background: transparent;
       border: none;
       cursor: pointer;

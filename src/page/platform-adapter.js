@@ -101,6 +101,19 @@ class PlatformAdapter {
     return elements;
   }
 
+  getParentAssistantMessageIndex(element) {
+    const assistantMessages = this.getAssistantMessages();
+    let parentElement = element;
+    while (parentElement) {
+      const index = assistantMessages.indexOf(parentElement);
+      if (index !== -1) {
+        return index;
+      }
+      parentElement = parentElement.parentElement;
+    }
+    return -1;
+  }
+
   /**
    * Get input area element
    */
@@ -217,9 +230,9 @@ class PlatformAdapter {
 
   hasExplicitToken(bodyData) {
     if (this.platform === 'chatgpt') {
-      return bodyData.messages.some(msg => 
-        msg.author?.role === 'user' && 
-            msg.content?.parts?.[0]?.includes('MCPT')
+      return bodyData?.messages?.some(msg => 
+        msg?.author?.role === 'user' && 
+            msg?.content?.parts?.[0]?.includes('MCPT')
       ) || false;
     } else if (this.platform === 'claude') {
       return bodyData.prompt.includes('MCPT');
@@ -232,8 +245,8 @@ class PlatformAdapter {
   appendSystemPrompt(bodyData, systemPromptWithSeparator, toRemoveToken) {
     let userContent = '';
     if (this.platform === 'chatgpt') {
-      const firstMessage = bodyData.messages.find(msg => msg.author.role === 'user');
-      if (firstMessage) {          
+      const firstMessage = bodyData?.messages?.find(msg => msg?.author?.role === 'user');
+      if (firstMessage && firstMessage?.content?.parts) {          
         // Append our system prompt to the end of the user message
         // Remove MCPT token if present
         userContent = firstMessage.content.parts[0];

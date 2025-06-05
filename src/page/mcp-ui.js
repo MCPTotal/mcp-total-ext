@@ -3,10 +3,11 @@
  * Handles UI components for MCP server configuration
  */
 class McpUI {
-  constructor(themeManager) {
+  constructor(themeManager, extensionUrl) {
     this.mcpManager = null;
     this._activeModal = null; // Track the currently active modal
     this._escKeyListener = null; // Track ESC key listener
+    this.extensionUrl = extensionUrl;
 
     // Initialize theme manager - first check if it's available globally
     this.themeManager = themeManager;
@@ -176,10 +177,10 @@ class McpUI {
         this.mcpManager.servers.forEach((server) => {
           const serverItem = document.createElement('div');
           serverItem.style.cssText = `
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            position: relative;
+            display: block;
             padding: 10px;
+            padding-right: 40px;
             border: 1px solid ${this.colors.border};
             border-radius: 4px;
             margin-bottom: 8px;
@@ -192,8 +193,8 @@ class McpUI {
           // Make entire item clickable for editing (non-readonly servers only)
           if (!server.readonly) {
             serverItem.addEventListener('click', (e) => {
-              // Don't trigger edit if clicking on action buttons
-              if (!e.target.closest('.action-buttons')) {
+              // Don't trigger edit if clicking on delete button
+              if (!e.target.closest('button')) {
                 showServerForm(server);
               }
             });
@@ -201,19 +202,55 @@ class McpUI {
             // Add hover effect for editable items
             serverItem.addEventListener('mouseover', () => {
               serverItem.style.backgroundColor = this.colors.backgroundHover;
+              // Show delete button on hover (only for non-readonly servers)
+              if (!isReadOnly) {
+                topRightBtn.style.opacity = '1';
+                topRightBtn.style.transform = 'scale(1)';
+              }
             });
 
             serverItem.addEventListener('mouseout', () => {
               serverItem.style.backgroundColor = server.enabled ? 
                 this.colors.backgroundLight : this.colors.backgroundModal;
+              // Hide delete button when not hovering (only for non-readonly servers)
+              if (!isReadOnly) {
+                topRightBtn.style.opacity = '0';
+                topRightBtn.style.transform = 'scale(0.8)';
+              }
             });
           }
 
           const serverInfo = document.createElement('div');
           serverInfo.innerHTML = `
-            <div style="font-weight: bold;">${server.name}</div>
+            <div style="font-weight: bold;">${server.visibleName || server.name}</div>
             <div style="font-size: 12px; color: ${this.colors.textSecondary}; margin-top: 4px;">${server.url}</div>
           `;
+
+          // Add cached tools information if available
+          if (server.cachedTools && server.cachedTools.length > 0) {
+            const cachedToolsRow = document.createElement('div');
+            cachedToolsRow.style.cssText = `
+              margin-top: 6px;
+              padding: 4px 8px;
+              background: ${this.colors.backgroundLight};
+              border-radius: 4px;
+              border-left: 3px solid ${this.colors.info};
+            `;
+            
+            const toolNames = server.cachedTools.map(tool => tool.name.replace(server.name, '').slice(1)).join(', ');
+            const truncatedToolNames = toolNames.length > 150 ? toolNames.substring(0, 150) + '...' : toolNames;
+            
+            cachedToolsRow.innerHTML = `
+              <div style="font-size: 11px; color: ${this.colors.textSecondary}; margin-bottom: 2px;">
+                🔧 Tools (${server.cachedTools.length}):
+              </div>
+              <div style="font-size: 11px; color: ${this.colors.text}; font-family: monospace;">
+                ${truncatedToolNames}
+              </div>
+            `;
+            
+            serverInfo.appendChild(cachedToolsRow);
+          }
 
           // Create container for status and automation (bottom row)
           const statusAutomationRow = document.createElement('div');
@@ -221,7 +258,7 @@ class McpUI {
             display: flex;
             align-items: center;
             gap: 12px;
-            margin-top: 4px;
+            margin-top: 6px;
           `;
 
           // Create clickable status element
@@ -317,62 +354,106 @@ class McpUI {
           // Add the row to server info
           serverInfo.appendChild(statusAutomationRow);
 
-          const actionButtons = document.createElement('div');
-          actionButtons.className = 'action-buttons';
-          actionButtons.style.cssText = `
-            display: flex;
-            align-items: center;
-            gap: 6px;
-          `;
 
           // Check if this server is read-only
           const isReadOnly = server.readonly === true;
 
-          // Delete button - always show but disable for read-only servers
-          const deleteBtn = document.createElement('button');
-          deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
-          deleteBtn.title = isReadOnly ? 'Cannot delete managed server' : 'Delete server';
-          deleteBtn.disabled = isReadOnly;
-          deleteBtn.style.cssText = `
-            background: ${isReadOnly ? this.colors.textSecondary : this.colors.danger};
-            color: ${isReadOnly ? this.colors.backgroundModal : 'white'};
-            border: none;
-            border-radius: 4px;
-            padding: 6px;
-            cursor: ${isReadOnly ? 'not-allowed' : 'pointer'};
-            font-size: 12px;
-            transition: background-color 0.2s ease;
-            width: 28px;
-            height: 28px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: ${isReadOnly ? '0.5' : '1'};
-          `;
+          // Create appropriate button for top-right corner
+          const topRightBtn = document.createElement('div');
+          
+          if (isReadOnly) {
+            // MCP Total managed server icon
+            const iconImg = document.createElement('img');
+            const currentTheme = this.themeManager?.getCurrentTheme() || 'light';
+            const iconName = currentTheme === 'dark' ? 'icon128_dark.png' : 'icon128.png';
+            iconImg.src = `${this.extensionUrl}assets/${iconName}`;
+            iconImg.style.cssText = `
+              width: 20px;
+              height: 20px;
+              border-radius: 10px;
+              pointer-events: none;
+              object-fit: cover;
+            `;
+            topRightBtn.appendChild(iconImg);
+            
+            topRightBtn.title = 'Managed by MCP Total';
+            topRightBtn.style.cssText = `
+              position: absolute;
+              top: 8px;
+              right: 8px;
+              background: transparent;
+              border: none;
+              border-radius: 50%;
+              padding: 0;
+              font-size: 10px;
+              width: 20px;
+              height: 20px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              opacity: 1;
+              transform: scale(1);
+              z-index: 1;
+              box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+              overflow: hidden;
+            `;
+          } else {
+            // Delete button for user-created servers
+            topRightBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+            topRightBtn.title = 'Delete server';
+            topRightBtn.style.cssText = `
+              position: absolute;
+              top: 8px;
+              right: 8px;
+              background: ${this.colors.danger};
+              color: white;
+              border: none;
+              border-radius: 50%;
+              padding: 4px;
+              cursor: pointer;
+              font-size: 10px;
+              transition: all 0.2s ease;
+              width: 20px;
+              height: 20px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              opacity: 0;
+              transform: scale(0.8);
+              z-index: 1;
+            `;
+          }
 
           if (!isReadOnly) {
-            deleteBtn.onclick = (e) => {
+            // Add click handler for delete functionality
+            topRightBtn.onclick = async (e) => {
               e.stopPropagation(); // Prevent item click
-              if (confirm(`Are you sure you want to delete the server "${server.name}"?`)) {
+              const confirmed = await this.showConfirmation(
+                `Are you sure you want to delete the server "${server.name}"? This action cannot be undone.`,
+                'Delete Server'
+              );
+              if (confirmed) {
                 this.mcpManager.removeServer(server.name);
                 renderServerList();
               }
             };
 
-            // Add hover effects for enabled delete button
-            deleteBtn.addEventListener('mouseover', () => {
-              deleteBtn.style.backgroundColor = this.colors.dangerLight;
+            // Add hover effects for delete button
+            topRightBtn.addEventListener('mouseover', () => {
+              topRightBtn.style.backgroundColor = this.colors.dangerLight;
+              topRightBtn.style.transform = 'scale(1.1)';
             });
 
-            deleteBtn.addEventListener('mouseout', () => {
-              deleteBtn.style.backgroundColor = this.colors.danger;
+            topRightBtn.addEventListener('mouseout', () => {
+              topRightBtn.style.backgroundColor = this.colors.danger;
+              topRightBtn.style.transform = 'scale(1)';
             });
           }
 
-          actionButtons.appendChild(deleteBtn);
+          // Add top-right button to server item (positioned absolutely)
+          serverItem.appendChild(topRightBtn);
 
           serverItem.appendChild(serverInfo);
-          serverItem.appendChild(actionButtons);
           serverList.appendChild(serverItem);
         });
       }
@@ -381,7 +462,7 @@ class McpUI {
     // Create "Add Server" button
     const addButton = document.createElement('button');
     addButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
-    addButton.title = 'Add new MCP server';
+    addButton.title = 'Add new server';
     addButton.style.cssText = `
       background: ${this.colors.primary};
       color: white;
@@ -411,7 +492,7 @@ class McpUI {
     // Test connection button
     const testConnectionButton = document.createElement('button');
     testConnectionButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>';
-    testConnectionButton.title = 'Test all connections';
+    testConnectionButton.title = 'Test connections';
     testConnectionButton.style.cssText = `
       background: ${this.colors.success};
       color: white;
@@ -460,7 +541,7 @@ class McpUI {
       }
 
       // Display results
-      alert('Connection Test Results:\n\n' + results.join('\n'));
+      await this.showAlert(results.join('\n'), 'Connection Test Results');
 
       // Restore button state
       testConnectionButton.innerHTML = originalContent;
@@ -485,7 +566,7 @@ class McpUI {
     // Add close button
     const closeButton = document.createElement('button');
     closeButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
-    closeButton.title = 'Close (ESC)';
+    closeButton.title = 'Close';
     closeButton.style.cssText = `
       background: ${this.colors.textSecondary};
       color: white;
@@ -539,97 +620,124 @@ class McpUI {
     actionButtonsContainer.appendChild(closeButton);
     actionButtonsContainer.appendChild(rightButtonsContainer);
 
-    // Create form container (initially hidden)
-    const formContainer = document.createElement('div');
-    formContainer.style.cssText = `
-      display: none;
-      padding: 15px;
-      border: 1px solid ${this.colors.border};
-      border-radius: 4px;
-      margin-bottom: 20px;
-      background: ${this.colors.backgroundLight};
-      color: ${this.colors.text};
-    `;
-
-    // Function to show server form
+    // Function to show server form in separate modal
     const showServerForm = (serverToEdit = null) => {
       const isEditing = !!serverToEdit;
 
-      formContainer.innerHTML = `
-        <h3 style="margin-top: 0; font-size: 16px; color: ${this.colors.text};">${isEditing ? 'Edit' : 'Add'} MCP Server</h3>
+      // Create separate modal for server form
+      const formModal = document.createElement('div');
+      formModal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.4);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10002;
+        animation: fadeIn 0.2s ease;
+      `;
+
+      // Create form modal content
+      const formModalContent = document.createElement('div');
+      formModalContent.style.cssText = `
+        background: ${this.colors.backgroundModal};
+        color: ${this.colors.text};
+        border-radius: 8px;
+        padding: 24px;
+        width: 90%;
+        max-width: 500px;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        animation: slideIn 0.3s ease;
+      `;
+
+      formModalContent.innerHTML = `
+        <h2 style="margin-top: 0; font-size: 18px; color: ${this.colors.text}; margin-bottom: 20px;">${isEditing ? 'Edit' : 'Add'} MCP Server</h2>
         
-        <div style="margin-bottom: 12px;">
-          <label style="display: block; margin-bottom: 4px; font-weight: bold; color: ${this.colors.text};">Server ID:</label>
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; margin-bottom: 6px; font-weight: bold; color: ${this.colors.text};">Server ID:</label>
           <input type="text" id="server-id" ${isEditing ? 'disabled' : ''} 
             value="${isEditing ? serverToEdit.name : ''}" 
-            style="width: 100%; padding: 6px; border: 1px solid ${this.colors.border}; border-radius: 4px; background: ${this.colors.backgroundInput}; color: ${this.colors.text};">
-          <div style="font-size: 11px; color: ${this.colors.textSecondary}; margin-top: 2px;">
+            style="width: 100%; padding: 8px; border: 1px solid ${this.colors.border}; border-radius: 4px; background: ${this.colors.backgroundInput}; color: ${this.colors.text}; box-sizing: border-box;">
+          <div style="font-size: 11px; color: ${this.colors.textSecondary}; margin-top: 4px;">
             Unique identifier for this server. Cannot be changed once created.
           </div>
         </div>
         
-        <div style="margin-bottom: 12px;">
-          <label style="display: block; margin-bottom: 4px; font-weight: bold; color: ${this.colors.text};">Server URL:</label>
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; margin-bottom: 6px; font-weight: bold; color: ${this.colors.text};">Server URL:</label>
           <input type="text" id="server-url" 
             value="${isEditing ? serverToEdit.url : 'https://'}" 
-            style="width: 100%; padding: 6px; border: 1px solid ${this.colors.border}; border-radius: 4px; background: ${this.colors.backgroundInput}; color: ${this.colors.text};">
-          <div style="font-size: 11px; color: ${this.colors.textSecondary}; margin-top: 2px;">
+            style="width: 100%; padding: 8px; border: 1px solid ${this.colors.border}; border-radius: 4px; background: ${this.colors.backgroundInput}; color: ${this.colors.text}; box-sizing: border-box;">
+          <div style="font-size: 11px; color: ${this.colors.textSecondary}; margin-top: 4px;">
             Full URL to the MCP server endpoint (e.g., https://example.com/mcp)
           </div>
         </div>
         
-        <div style="margin-bottom: 12px;">
-          <label style="display: block; margin-bottom: 4px; font-weight: bold; color: ${this.colors.text};">API Key:</label>
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; margin-bottom: 6px; font-weight: bold; color: ${this.colors.text};">API Key:</label>
           <input type="password" id="server-api-key" 
             value="${isEditing ? serverToEdit.apiKey : ''}" 
-            style="width: 100%; padding: 6px; border: 1px solid ${this.colors.border}; border-radius: 4px; background: ${this.colors.backgroundInput}; color: ${this.colors.text};">
-          <div style="font-size: 11px; color: ${this.colors.textSecondary}; margin-top: 2px;">
+            style="width: 100%; padding: 8px; border: 1px solid ${this.colors.border}; border-radius: 4px; background: ${this.colors.backgroundInput}; color: ${this.colors.text}; box-sizing: border-box;">
+          <div style="font-size: 11px; color: ${this.colors.textSecondary}; margin-top: 4px;">
             Authentication key for accessing the server (if required)
           </div>
         </div>
-        
-        <div style="margin-bottom: 12px;">
-          <label style="display: block; margin-bottom: 4px; font-weight: bold; color: ${this.colors.text};">Default Tool Automation:</label>
-          <select id="server-automation" style="width: 100%; padding: 6px; border: 1px solid ${this.colors.border}; border-radius: 4px; background: ${this.colors.backgroundInput}; color: ${this.colors.text};">
-            <option value="manual" ${isEditing && serverToEdit.automation === 'manual' ? 'selected' : ''}>Manual - Require clicks to run and send</option>
-            <option value="autorun" ${isEditing && serverToEdit.automation === 'autorun' ? 'selected' : ''}>Auto-run - Automatically run, manually send</option>
-            <option value="autosend" ${isEditing && serverToEdit.automation === 'autosend' ? 'selected' : ''}>Auto-run and send - Fully automatic</option>
-          </select>
-          <div style="font-size: 11px; color: ${this.colors.textSecondary}; margin-top: 2px;">
-            Default automation behavior for all tools from this server. Can be overridden per tool.
-          </div>
-        </div>
-        
-        <div style="margin-bottom: 12px;">
-          <label style="display: flex; align-items: center; cursor: pointer; color: ${this.colors.text};">
-            <input type="checkbox" id="server-enabled" ${isEditing ? (serverToEdit.enabled ? 'checked' : '') : 'checked'} 
-              style="margin-right: 6px;">
-            <span>Enabled</span>
-          </label>
-        </div>
-        
-        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px;">
-          <button id="cancel-btn" style="padding: 6px 12px; border: 1px solid ${this.colors.border}; background: ${this.colors.backgroundModal}; color: ${this.colors.text}; border-radius: 4px; cursor: pointer;">
-            Cancel
+          
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 16px; border-top: 1px solid ${this.colors.border};">
+          <button id="cancel-btn" title="Cancel" style="padding: 8px; border: none; background: ${this.colors.textSecondary}; color: white; border-radius: 4px; cursor: pointer; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
-          <button id="save-btn" style="padding: 6px 12px; background: ${this.colors.primary}; color: white; border: none; border-radius: 4px; cursor: pointer;">
-            ${isEditing ? 'Save' : 'Add'} Server
+          <button id="save-btn" title="${isEditing ? 'Save changes' : 'Add server'}" style="padding: 8px; background: ${this.colors.primary}; color: white; border: none; border-radius: 4px; cursor: pointer; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
           </button>
         </div>
       `;
 
-      formContainer.style.display = 'block';
+      // Handle ESC key for form modal (should take precedence over main modal ESC)
+      const handleFormEsc = (e) => {
+        if (e.key === 'Escape') {
+          // Check if there are any alert/confirmation dialogs open (higher z-index)
+          const alertDialogs = document.querySelectorAll('[style*="z-index: 10003"]');
+          if (alertDialogs.length > 0) {
+            // Don't handle ESC if alert/confirmation dialogs are open
+            return;
+          }
+          
+          e.stopPropagation(); // Prevent main modal ESC handler from firing
+          e.preventDefault();
+          closeFormModal();
+        }
+      };
+
+      // Cleanup function for form modal
+      const closeFormModal = () => {
+        if (document.body.contains(formModal)) {
+          document.body.removeChild(formModal);
+        }
+        // Always remove the ESC listener when closing
+        document.removeEventListener('keydown', handleFormEsc);
+      };
+
+      // Assemble form modal
+      formModal.appendChild(formModalContent);
+      document.body.appendChild(formModal);
+      
+      // Add ESC key listener
+      document.addEventListener('keydown', handleFormEsc);
 
       // Handle form submission
       document.getElementById('save-btn').onclick = async () => {
         const id = document.getElementById('server-id').value.trim();
         const url = document.getElementById('server-url').value.trim();
         const apiKey = document.getElementById('server-api-key').value.trim();
-        const automation = document.getElementById('server-automation').value;
-        const enabled = document.getElementById('server-enabled').checked;
 
         if (!id || !url) {
-          alert('Server ID and URL are required.');
+          await this.showAlert('Server ID and URL are required.', 'Validation Error');
           return;
         }
 
@@ -637,7 +745,7 @@ class McpUI {
         try {
           new URL(url);
         } catch (e) {
-          alert('Please enter a valid URL with protocol (e.g., https://example.com)');
+          await this.showAlert('Please enter a valid URL with protocol (e.g., https://example.com)', 'Invalid URL');
           return;
         }
 
@@ -646,41 +754,59 @@ class McpUI {
           name: id,
           url,
           apiKey,
-          automation,
-          enabled
+          enabled: isEditing ? serverToEdit.enabled : true, // Preserve enabled state when editing
+          automation: isEditing ? serverToEdit.automation : 'manual', // Preserve automation when editing
+          readonly: isEditing ? serverToEdit.readonly : false // Preserve readonly state when editing
         };
 
         // Add or update server
         await this.mcpManager.addServer(serverConfig);
-        
-        // Apply automation preferences to all tools from this server
-        if (this.toolManager) {
-          this.applyServerAutomationToTools(id, automation);
-        }
 
-        // Hide form and refresh list
-        formContainer.style.display = 'none';
+        // Close form modal and refresh list
+        closeFormModal();
         renderServerList();
       };
 
       // Handle cancel
       document.getElementById('cancel-btn').onclick = () => {
-        formContainer.style.display = 'none';
+        closeFormModal();
       };
 
-      // After setting formContainer.style.display = 'block'
-      // Add this code to update the save button styling
-      const saveBtn = document.getElementById('save-btn');
-      saveBtn.style.backgroundColor = this.colors.primary;
 
+      // Handle click outside form modal
+      formModal.addEventListener('click', (e) => {
+        if (e.target === formModal) {
+          closeFormModal();
+        }
+      });
+
+      // Add hover effects for the form buttons
+      const saveBtn = document.getElementById('save-btn');
+      const cancelBtn = document.getElementById('cancel-btn');
+      
       // Add hover effects for save button
       saveBtn.addEventListener('mouseover', () => {
         saveBtn.style.backgroundColor = this.colors.primaryLight;
       });
-
       saveBtn.addEventListener('mouseout', () => {
         saveBtn.style.backgroundColor = this.colors.primary;
       });
+
+      // Add hover effects for cancel button  
+      cancelBtn.addEventListener('mouseover', () => {
+        cancelBtn.style.backgroundColor = this.colors.primary;
+      });
+      cancelBtn.addEventListener('mouseout', () => {
+        cancelBtn.style.backgroundColor = this.colors.textSecondary;
+      });
+
+      // Focus the first input field
+      setTimeout(() => {
+        const firstInput = isEditing ? 
+          document.getElementById('server-url') : 
+          document.getElementById('server-id');
+        if (firstInput) firstInput.focus();
+      }, 100);
     };
 
     // Handle add button click
@@ -690,7 +816,6 @@ class McpUI {
 
     // Assemble everything
     modalContent.appendChild(heading);
-    modalContent.appendChild(formContainer);
     modalContent.appendChild(serverList);
     modalContent.appendChild(actionButtonsContainer);
     modal.appendChild(modalContent);
@@ -724,9 +849,14 @@ class McpUI {
     // Add our ESC key listener
     this._escKeyListener = (event) => {
       if (event.key && event.key === 'Escape' && this._activeModal) {
-        console.log('📡 ESC key pressed, closing MCP config UI');
-        this._closeActiveModal();
-        event.preventDefault();
+        // Only close main modal if no higher priority dialogs are open
+        const alertDialogs = document.querySelectorAll('[style*="z-index: 10003"]');
+        const formModals = document.querySelectorAll('[style*="z-index: 10002"]');
+        if (alertDialogs.length === 0 && formModals.length === 0) {
+          console.log('📡 ESC key pressed, closing MCP config UI');
+          this._closeActiveModal();
+          event.preventDefault();
+        }
       }
     };
 
@@ -787,9 +917,11 @@ class McpUI {
     console.log('📡 Keyboard shortcut registered: ' + shortcutText);
 
     // Show a temporary notification about the shortcut when first loaded
+    /*
     setTimeout(() => {
       this.showShortcutNotification();
     }, 5000); // Show notification after 5 seconds to allow page to load
+    */
   }
 
   /**
@@ -900,6 +1032,346 @@ class McpUI {
       default:
         return 'Manual';
     }
+  }
+
+  /**
+   * Show custom alert dialog that matches our theme
+   * @param {string} message - The alert message
+   * @param {string} title - The dialog title (optional)
+   * @param {string} okText - Text for the OK button (optional)
+   * @returns {Promise<void>} - Promise that resolves when OK is clicked
+   */
+  showAlert(message, title = 'Alert', okText = 'OK') {
+    return new Promise((resolve) => {
+      // Create alert modal overlay
+      const alertModal = document.createElement('div');
+      alertModal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.2);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10003;
+        animation: fadeIn 0.2s ease;
+      `;
+
+      // Add keyframes for animations if not already added
+      if (!document.querySelector('#alert-keyframes')) {
+        const style = document.createElement('style');
+        style.id = 'alert-keyframes';
+        style.textContent = `
+          @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes slideIn { from { transform: scale(0.9) translateY(-10px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+        `;
+        document.head.appendChild(style);
+      }
+
+      // Create alert dialog content
+      const alertContent = document.createElement('div');
+      alertContent.style.cssText = `
+        background: ${this.colors.backgroundModal};
+        color: ${this.colors.text};
+        border-radius: 8px;
+        padding: 24px;
+        width: 90%;
+        max-width: 400px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        animation: slideIn 0.3s ease;
+      `;
+
+      // Create title
+      const titleElement = document.createElement('h3');
+      titleElement.textContent = title;
+      titleElement.style.cssText = `
+        margin: 0 0 16px 0;
+        color: ${this.colors.text};
+        font-size: 18px;
+        font-weight: 600;
+      `;
+
+      // Create message
+      const messageElement = document.createElement('p');
+      messageElement.textContent = message;
+      messageElement.style.cssText = `
+        margin: 0 0 24px 0;
+        color: ${this.colors.textSecondary};
+        font-size: 14px;
+        line-height: 1.5;
+        white-space: pre-line;
+      `;
+
+      // Create button container
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.cssText = `
+        display: flex;
+        justify-content: flex-end;
+      `;
+
+      // Create OK button
+      const okButton = document.createElement('button');
+      okButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+      okButton.title = okText;
+      okButton.style.cssText = `
+        padding: 8px;
+        border: none;
+        background: ${this.colors.primary};
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      `;
+
+      // Add hover effects
+      okButton.addEventListener('mouseover', () => {
+        okButton.style.backgroundColor = this.colors.primaryLight;
+      });
+      okButton.addEventListener('mouseout', () => {
+        okButton.style.backgroundColor = this.colors.primary;
+      });
+
+      // Handle button click
+      const cleanup = () => {
+        if (document.body.contains(alertModal)) {
+          document.body.removeChild(alertModal);
+        }
+      };
+
+      okButton.onclick = () => {
+        cleanup();
+        resolve();
+      };
+
+      // Handle ESC key
+      const handleEsc = (e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          e.preventDefault();
+          cleanup();
+          resolve();
+          document.removeEventListener('keydown', handleEsc, true); // Match capture phase
+        }
+      };
+      document.addEventListener('keydown', handleEsc, true); // Use capture phase
+
+      // Handle click outside
+      alertModal.addEventListener('click', (e) => {
+        if (e.target === alertModal) {
+          cleanup();
+          resolve();
+        }
+      });
+
+      // Assemble dialog
+      buttonContainer.appendChild(okButton);
+      alertContent.appendChild(titleElement);
+      alertContent.appendChild(messageElement);
+      alertContent.appendChild(buttonContainer);
+      alertModal.appendChild(alertContent);
+
+      // Add to DOM
+      document.body.appendChild(alertModal);
+
+      // Focus OK button for keyboard accessibility
+      setTimeout(() => okButton.focus(), 100);
+    });
+  }
+
+  /**
+   * Show custom confirmation dialog that matches our theme
+   * @param {string} message - The confirmation message
+   * @param {string} title - The dialog title (optional)
+   * @param {string} confirmText - Text for the confirm button (optional)
+   * @param {string} cancelText - Text for the cancel button (optional)
+   * @returns {Promise<boolean>} - Promise that resolves to true if confirmed, false if cancelled
+   */
+  showConfirmation(message, title = 'Confirm Action', confirmText = 'Delete', cancelText = 'Cancel') {
+    return new Promise((resolve) => {
+      // Create confirmation modal overlay
+      const confirmModal = document.createElement('div');
+      confirmModal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.2);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10003;
+        animation: fadeIn 0.2s ease;
+      `;
+
+      // Add keyframes for animations if not already added
+      if (!document.querySelector('#confirmation-keyframes')) {
+        const style = document.createElement('style');
+        style.id = 'confirmation-keyframes';
+        style.textContent = `
+          @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes slideIn { from { transform: scale(0.9) translateY(-10px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+        `;
+        document.head.appendChild(style);
+      }
+
+      // Create confirmation dialog content
+      const confirmContent = document.createElement('div');
+      confirmContent.style.cssText = `
+        background: ${this.colors.backgroundModal};
+        color: ${this.colors.text};
+        border-radius: 8px;
+        padding: 24px;
+        width: 90%;
+        max-width: 400px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        animation: slideIn 0.3s ease;
+      `;
+
+      // Create title
+      const titleElement = document.createElement('h3');
+      titleElement.textContent = title;
+      titleElement.style.cssText = `
+        margin: 0 0 16px 0;
+        color: ${this.colors.text};
+        font-size: 18px;
+        font-weight: 600;
+      `;
+
+      // Create message
+      const messageElement = document.createElement('p');
+      messageElement.textContent = message;
+      messageElement.style.cssText = `
+        margin: 0 0 24px 0;
+        color: ${this.colors.textSecondary};
+        font-size: 14px;
+        line-height: 1.5;
+      `;
+
+      // Create button container
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.cssText = `
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+      `;
+
+      // Create cancel button
+      const cancelButton = document.createElement('button');
+      cancelButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+      cancelButton.title = cancelText;
+      cancelButton.style.cssText = `
+        padding: 8px;
+        border: 1px solid ${this.colors.border};
+        background: ${this.colors.backgroundModal};
+        color: ${this.colors.text};
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      `;
+
+      // Create confirm button
+      const confirmButton = document.createElement('button');
+      confirmButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+      confirmButton.title = confirmText;
+      confirmButton.style.cssText = `
+        padding: 8px;
+        border: none;
+        background: ${this.colors.danger};
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      `;
+
+      // Add hover effects
+      cancelButton.addEventListener('mouseover', () => {
+        cancelButton.style.backgroundColor = this.colors.backgroundHover;
+      });
+      cancelButton.addEventListener('mouseout', () => {
+        cancelButton.style.backgroundColor = this.colors.backgroundModal;
+      });
+
+      confirmButton.addEventListener('mouseover', () => {
+        confirmButton.style.backgroundColor = this.colors.dangerLight;
+      });
+      confirmButton.addEventListener('mouseout', () => {
+        confirmButton.style.backgroundColor = this.colors.danger;
+      });
+
+      // Handle button clicks
+      const cleanup = () => {
+        if (document.body.contains(confirmModal)) {
+          document.body.removeChild(confirmModal);
+        }
+      };
+
+      cancelButton.onclick = () => {
+        cleanup();
+        resolve(false);
+      };
+
+      confirmButton.onclick = () => {
+        cleanup();
+        resolve(true);
+      };
+
+      // Handle ESC key
+      const handleEsc = (e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          e.preventDefault();
+          cleanup();
+          resolve(false);
+          document.removeEventListener('keydown', handleEsc, true); // Match capture phase
+        }
+      };
+      document.addEventListener('keydown', handleEsc, true); // Use capture phase
+
+      // Handle click outside
+      confirmModal.addEventListener('click', (e) => {
+        if (e.target === confirmModal) {
+          cleanup();
+          resolve(false);
+        }
+      });
+
+      // Assemble dialog
+      buttonContainer.appendChild(cancelButton);
+      buttonContainer.appendChild(confirmButton);
+      confirmContent.appendChild(titleElement);
+      confirmContent.appendChild(messageElement);
+      confirmContent.appendChild(buttonContainer);
+      confirmModal.appendChild(confirmContent);
+
+      // Add to DOM
+      document.body.appendChild(confirmModal);
+
+      // Focus confirm button for keyboard accessibility
+      setTimeout(() => confirmButton.focus(), 100);
+    });
   }
 }
 

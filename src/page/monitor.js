@@ -173,10 +173,10 @@
 
     // Initialize components with platform adapter
     const themeManager = await new ThemeManager(platformAdapter);
-    const mcpUI = new McpUI(themeManager);
+    const mcpUI = new McpUI(themeManager, EXTENSION_URL);
     const uiManager = new UIManager(themeManager, platformAdapter, mcpUI, EXTENSION_URL);
     const toolManager = new ToolManager(uiManager, platformAdapter);
-    const mcpManager = new McpManager(toolManager, mcpUI, PageMcpClient);
+    const mcpManager = new McpManager(toolManager, mcpUI, PageMcpClient, uiManager);
 
     // In debug mode, expose instances for console debugging
     if (!isProduction) {
@@ -199,6 +199,6 @@
     });
 
     // Send startup message
-    sendContentMessage('MONITOR_STARTED', { version: '1.2.0' });
+    sendContentMessage('MONITOR_STARTED', { version: '1.2.1' });
   }
 })(); 

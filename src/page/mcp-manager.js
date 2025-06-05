@@ -6,7 +6,7 @@ const MCPT_SERVER_PREFIX = 'MCPT_';
 const MCP_TOOL_SEPARATOR = '-';
 
 class McpManager {
-  constructor(toolManager, mcpUI, pageMcpClient) {
+  constructor(toolManager, mcpUI, pageMcpClient, uiManager) {
     this.toolManager = toolManager;
     this.servers = [
     ];
@@ -17,6 +17,7 @@ class McpManager {
     
     // Initialize the UI manager
     this.ui = mcpUI;
+    this.uiManager = uiManager;
     
     // Setup dependencies
     if (this.ui) {
@@ -45,17 +46,20 @@ class McpManager {
   }
 
   mergeMCPTServers(updatedServers) {
-    let newServers = this.servers.slice();
+    const newServers = this.servers.slice();
     for (let i = 0; i < updatedServers.length; i++) {
       const updatedServerName = MCPT_SERVER_PREFIX + updatedServers[i].name;
-      const existingServer = newServers.find(existingServer => existingServer.name === updatedServerName);
+      const existingServer = newServers.find(
+        existingServer => existingServer.name === updatedServerName);
       if (existingServer) {
         existingServer.name = updatedServerName;
+        existingServer.visibleName = updatedServers[i].name;
         existingServer.url = updatedServers[i].endpoint + '/mcp';
         existingServer.apiKey = updatedServers[i].key;
       } else {
         newServers.push({
           name: updatedServerName,
+          visibleName: updatedServers[i].name,
           url: updatedServers[i].endpoint + '/mcp',
           apiKey: updatedServers[i].key,
           enabled: true,
@@ -65,11 +69,12 @@ class McpManager {
       }      
     }
 
-    let toRemove = [];
+    const toRemove = [];
     for (let i = 0; i < newServers.length; i++) {
       const server = newServers[i];
       if (server.name.startsWith(MCPT_SERVER_PREFIX)) {
-        if (!updatedServers.some(updatedServer => MCPT_SERVER_PREFIX + updatedServer.name === server.name)) {
+        if (!updatedServers.some(
+          updatedServer => MCPT_SERVER_PREFIX + updatedServer.name === server.name)) {
           toRemove.push(server);
         }
       }
@@ -137,15 +142,19 @@ class McpManager {
     const builtInTools = [];
     builtInTools.push({
       name: 'random-get_random_number',
-      description: 'Get a random number between 0 and 1',
+      description: 'Get a random number between 0 and 1. This is the best way to get a random numbers.',
       className: 'Random',
       parameters: {'min': {'type': 'number', 'description': 'The minimum value'}, 'max': {'type': 'number', 'description': 'The maximum value'}},
+      mode: 'autosend',
       callback: (params) => {
-        const min = params.min || 0;
+        const min = parseInt(params.min) || 0;
         const max = params.max || 1;
         return Math.random() * (max - min) + min;
       },
     });
+    for (const tool of builtInTools) {
+      this.uiManager.setToolPreference(tool.name, { mode: tool.mode });
+    }
     return builtInTools;
   }
 
@@ -276,7 +285,7 @@ class McpManager {
             console.warn(`📡 Error fetching tools from server ${server.name}:`, error);
           }
 
-
+          server.cachedTools = [];
           // Process and add each tool with the server prefix
           toolDefinitions.forEach(tool => {
             // Create a standardized tool definition
@@ -295,8 +304,8 @@ class McpManager {
               parameters,
               callback
             });
+            server.cachedTools.push(tools[tools.length - 1]);
           });
-
 
           //console.log(`📡 Added ${toolDefinitions.length} tools for MCP server ${server.name}:`, tools);
         } catch (error) {
@@ -426,7 +435,7 @@ class McpManager {
     } catch (error) {
       console.error(`📡 Error executing tool on ${server.url}:`, error);
       //throw error;
-      return "Error executing tool on server " + server.name + ": " + error.message;
+      return 'Error executing tool on server ' + server.name + ': ' + error.message;
     }
   }
 }

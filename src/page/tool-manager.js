@@ -7,16 +7,17 @@ class ToolManager {
   static TOOL_PARAMS_PREFIX = 'PARAMS:';
   static SYSTEM_PROMPT_SEPARATOR = '===TOOLS-INSTRUCTIONS==='; // Add separator constant
   static SYSTEM_PROMPT_SEPARATOR_END = '===TOOLS-END===';
-  static SYSTEM_PROMPT = `You have access to tools that I (the user) can run for you. You don’t execute them — instead, respond using a specific format so I can run the tool and return the result.
+  static SYSTEM_PROMPT = `You have access to a set of tools which I (the user) can execute for you. You do **not** run them directly — instead, respond to me using a structured format, and I will return the result.
 
-## 🚨 Tool Call Format
+Your task is to use these tools **proactively** and **autonomously** to help me complete my requests.
 
+## 🚨 Tool Call Format (STRICT)
 You must reply with tool usage in this exact format:
 [TOOL_CALL]{"tool": "prefix-tool_name", "parameters": {"param1": "value1"}}[/TOOL_CALL]
 
 - Format must be exact. Tags and JSON must match perfectly.
 - No text, markdown, or explanation outside the tags.
-- Include the full tool name (with prefix like "MCPT:").
+- Include the full tool name (e.g. "MCPT_Default-whatsapp_get_chats").
 
 ❗ If the format is wrong, the tool will NOT run.
 
@@ -29,16 +30,16 @@ Stop your reply after it — do not include explanations, conclusions, or follow
 Wait for my reply before continuing with the next step.
 
 ## 🧭 ID Handling
-- If a required \`id\` (like \`page_id\`, \`block_id\`) is missing, first use a tool to retrieve it.
+- If a required \`id\` (like \`page_id\`, \`block_id\`) is missing, you may need to first use a tool to retrieve it.
 - If a result includes an ID, use another tool to resolve it to a human-readable value before replying.
-- Don’t guess or hardcode IDs. Ask only if you can't retrieve it.
+- Don’t guess or hardcode IDs, but try to resolve them yourself using the provided tools. Only ask if you can't.
 
 ---
 
-## ⚙️ Chaining & Completion
-
+## ⚙️ Chaining & Completion (IMPORTANT!)
 - Use tools to complete the full task, one step at a time.
-- Often you’ll need to chain multiple tools (e.g., search → get ID → call → confirm).
+- DON'T try to run the tool yourself, DON'T use python code for that. just respond with the tool call format and let me run it.
+- Often you’ll need to chain multiple tools (e.g., search → get ID → call → confirm) or just calling a single tool a few times.
 - Don’t simulate tool results.
 - Describe actions naturally, without referencing tool names.
 
@@ -59,7 +60,8 @@ Only use tools explicitly listed in the registry I provide.
     
     // Track processed nodes to avoid duplication
     this.processedNodes = new WeakMap();
-    this.firstMessageUrl = null; // Store URL where first message was sent
+    this.lastMessageUrl = null; // Store URL where last message was sent
+    this.lastAssitantMessageRan = -1; // Store number of assistant messages
 
     // Setup network interceptors
     this.setupNetworkInterceptors();
@@ -492,19 +494,30 @@ Only use tools explicitly listed in the registry I provide.
         
         // Find the best container for UI injection
         const targetElement = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-        
+
+        const parentAssistantMessageIndex = 
+          this.platformAdapter.getParentAssistantMessageIndex(node);
+        // Check if a message was already sent (avoid running old messages)
+        console.log('📡 Checking if can auto-run:', window.location.href, this.lastMessageUrl, this.lastAssitantMessageRan, parentAssistantMessageIndex);
+        const canAutoRun = window.location.href === this.lastMessageUrl &&
+           this.lastAssitantMessageRan <  parentAssistantMessageIndex;
         // Inject UI
+        const self = this;
         requestAnimationFrame(() => {
           console.log('****** Injecting tool result button for tool calls:', 
             toolCalls, targetElement);
           toolCalls.forEach(toolCall => {
-            this.uiManager.injectToolResultButton(
+            const ran = this.uiManager.injectToolResultButton(
               toolCall, 
               toolCall.execute, 
               toolCall.toolCallText, 
               targetElement, 
-              window.location.href === this.lastMessageUrl
+              canAutoRun
             );
+            if (ran) {
+              console.log('------- Last auto-run set to:', targetElement);
+              self.lastAssitantMessageRan = parentAssistantMessageIndex;
+            }
           });
         });
         
@@ -597,17 +610,17 @@ Only use tools explicitly listed in the registry I provide.
 
   updateServerAutomation(serverId, automation) {
     console.log(`📡 Updating server automation for ${serverId} to ${automation}`);
-     // Get all tools from this server (tools are prefixed with server ID)
-     const serverPrefix = `${serverId}`;
-     const affectedTools = this.getToolsByPrefix(serverPrefix);
+    // Get all tools from this server (tools are prefixed with server ID)
+    const serverPrefix = `${serverId}`;
+    const affectedTools = this.getToolsByPrefix(serverPrefix);
  
-     console.log(`📡 Applying automation "${automation}" to ${affectedTools.length} tools from server "${serverId}"`);
+    console.log(`📡 Applying automation "${automation}" to ${affectedTools.length} tools from server "${serverId}"`);
  
-     // Apply automation preference to each tool
-     affectedTools.forEach(toolName => {
-       this.uiManager.setToolPreference(toolName, { mode: automation });
-       console.log(`📡 Set tool "${toolName}" to automation mode: ${automation}`);
-     });
+    // Apply automation preference to each tool
+    affectedTools.forEach(toolName => {
+      this.uiManager.setToolPreference(toolName, { mode: automation });
+      console.log(`📡 Set tool "${toolName}" to automation mode: ${automation}`);
+    });
   }
 }
 
