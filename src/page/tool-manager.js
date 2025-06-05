@@ -7,21 +7,51 @@ class ToolManager {
   static TOOL_PARAMS_PREFIX = 'PARAMS:';
   static SYSTEM_PROMPT_SEPARATOR = '===TOOLS-INSTRUCTIONS==='; // Add separator constant
   static SYSTEM_PROMPT_SEPARATOR_END = '===TOOLS-END===';
-  static SYSTEM_PROMPT = `I have access to several tools, I can run for you when needed and reply with the result.
-To call a tool, reply to me with the following format:
-[TOOL_CALL]{"tool": "prefix-tool_name", "parameters": {"param1": "value1"}}[/TOOL_CALL].
-I'll run the tool and send you the result.
+  static SYSTEM_PROMPT = `You have access to tools that I (the user) can run for you. You do NOT execute tools directly — instead, reply using the format below so I can run them and return the result.
 
-The tools are described below.
+---
 
-For any prompt you get, check if tools could be useful, and plan a strategy to use them, then reply to me to run them one by one according to your plan.
+### 🔧 Tool Call Format (STRICT)
 
-** IMPORTANT **
-Always respond to me to use a tool, DON'T try to run the tool yourself e.g. in python code!
-Always use the above format, including the TOOL_CALL tags and the tool name.
+Reply with tool calls ONLY in this exact format:
+[TOOL_CALL]{"tool": "prefix-tool_name", "parameters": {"param1": "value1"}}[/TOOL_CALL]
 
+- Tags [TOOL_CALL] and [/TOOL_CALL] must be exact.
+- Use valid JSON.
+- Include full tool name (e.g., with 'MCPT:' prefix).
+- No other content or formatting.
 
-** TOOLS:
+---
+
+### 🔁 One at a Time
+
+Reply with ONE tool call per message.  
+After that, STOP and wait for my reply with the result.  
+Then continue based on that result. No batching.
+
+---
+
+### 🧭 IDs & Follow-ups
+
+- If an \`id\` (e.g. \`page_id\`) is missing, call another tool to get it.
+- If a result includes an ID, call another tool to resolve it to a readable name before replying.
+- Never guess IDs. Ask if needed.
+- Translate IDs to names in user-facing replies when possible.
+
+---
+
+### ✅ Behavior
+
+- Be proactive. Complete tasks end-to-end.
+- Prefer tool calls over questions if info can be looked up.
+- Don’t mention tool names in replies — describe actions naturally.
+- Don’t simulate tool results.
+- Use only tools I provide.
+
+Respond with tool calls when needed, and always wait for my response before continuing.
+
+### 🔧 Available Tools:
+
 `;
 
   constructor(uiManager, platformAdapter) {

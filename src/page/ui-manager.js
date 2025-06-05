@@ -2,9 +2,10 @@
 // UIManager Class
 // ==============================
 class UIManager {
-  constructor(themeManager, platformAdapter) {
+  constructor(themeManager, platformAdapter, mcpUI, extensionUrl) {
     this.platformAdapter = platformAdapter;
-    
+    this.mcpUI = mcpUI;
+    this.extensionUrl = extensionUrl;
     // Store tool automation preferences
     this.toolPreferences = {};
     // Load preferences from localStorage on initialization
@@ -21,6 +22,10 @@ class UIManager {
       this.colors = colors;
       this._onThemeChanged();
     });
+
+    setTimeout(() => {
+      this.createMcpSettingsButton();
+    }, 500);
   }
 
   /**
@@ -44,6 +49,15 @@ class UIManager {
     
     // Re-apply styles to any existing system prompt toggles
     this._updateSystemPromptTheme();
+    
+    // Update MCP settings button icon
+    const mcpButton = document.getElementById('mcp-settings-button');
+    if (mcpButton && mcpButton._mcpIcon) {
+      this._updateButtonIcon(mcpButton._mcpIcon);
+      
+      // Update button background color
+      mcpButton.style.backgroundColor = this.colors.primary;
+    }
   }
 
   /**
@@ -170,7 +184,7 @@ class UIManager {
   }
 
   // Function to create the settings button with menu
-  createSettingsButton(toolCall, toolButton) {
+  createSettingsButton(toolCall) {
     // Create settings button (shown when send button is hidden)
     const settingsButton = document.createElement('button');
     settingsButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
@@ -196,7 +210,7 @@ class UIManager {
     `;
 
     // Create the settings menu
-    const settingsMenu = this.createSettingsMenu(toolCall, toolButton);
+    const settingsMenu = this.createSettingsMenu(toolCall);
 
     // Add settings button hover effects
     settingsButton.addEventListener('mouseover', () => {
@@ -244,7 +258,7 @@ class UIManager {
   }
 
   // Create the settings menu with the three mode options
-  createSettingsMenu(toolCall, toolButton) {
+  createSettingsMenu(toolCall) {
     const settingsMenu = document.createElement('div');
     settingsMenu.className = 'tool-settings-menu';
     settingsMenu.style.cssText = `
@@ -278,7 +292,6 @@ class UIManager {
       currentMode,
       `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`,
       toolCall,
-      toolButton
     );
 
     const autoRunButton = this.createModeButton(
@@ -287,7 +300,6 @@ class UIManager {
       currentMode,
       `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`,
       toolCall,
-      toolButton
     );
 
     const autoSendButton = this.createModeButton(
@@ -296,7 +308,6 @@ class UIManager {
       currentMode,
       `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path></svg>`,
       toolCall,
-      toolButton
     );
 
     // Add buttons to menu
@@ -308,7 +319,7 @@ class UIManager {
   }
 
   // Create a button option for the settings menu
-  createModeButton(label, value, currentMode, icon, toolCall, toolButton) {
+  createModeButton(label, value, currentMode, icon, toolCall) {
     const button = document.createElement('button');
     const isSelected = currentMode === value;
 
@@ -362,14 +373,6 @@ class UIManager {
 
       // Apply the preference immediately
       console.log(`📡 Setting tool ${toolCall.tool} mode to ${value}`);
-
-      if (value === 'autorun' || value === 'autosend') {
-        // Run the tool if it's not already running
-        if (!toolButton.disabled) {
-          console.log(`📡 Auto-executing tool ${toolCall.tool} after mode change`);
-          toolButton.click();
-        }
-      }
     });
 
     return button;
@@ -676,7 +679,7 @@ class UIManager {
     `;
 
     // Create a settings button (shown when send button is hidden)
-    const { settingsContainer, settingsButton } = this.createSettingsButton(toolCall, toolButton);
+    const { settingsContainer, settingsButton } = this.createSettingsButton(toolCall);
 
     // Add hover effect to send button
     sendButton.addEventListener('mouseover', () => {
@@ -853,7 +856,7 @@ class UIManager {
   // Inject a button into the UI to send the tool result
   injectToolResultButton(toolCall, executeToolCall, toolCallText, element, canAutoRun = false) {
     try {
-      console.log(`📡 Injecting button for tool: ${toolCall.tool}`);
+      console.log(`📡 Injecting button for tool: ${toolCall.tool}`, canAutoRun);
       this.drawToolResultButton(toolCall, executeToolCall, toolCallText, element, canAutoRun);
     } catch (e) {
       console.error('📡 Error injecting button:', e);
@@ -1050,6 +1053,102 @@ class UIManager {
     });
     
     return { toggleButton, toolDefElement };
+  }
+
+  createMcpSettingsButton() {
+    // Check if button already exists
+    if (document.getElementById('mcp-settings-button')) {
+      return;
+    }
+
+    const settingsButton = document.createElement('button');
+    settingsButton.id = 'mcp-settings-button';
+    
+    // Create image element for the icon
+    const iconImg = document.createElement('img');
+    iconImg.style.cssText = `
+      width: 50px;
+      height: 50px;
+      border-radius: 25px;
+      pointer-events: none;
+      object-fit: cover;
+    `;
+    
+    // Set initial icon based on current theme
+    this._updateButtonIcon(iconImg);
+    console.log('📡 MCP settings button created', this.extensionUrl, iconImg.src, iconImg);
+    
+    settingsButton.appendChild(iconImg);
+    settingsButton.title = 'MCP Settings (Ctrl+M)';
+    
+    settingsButton.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 50px;
+      height: 50px;
+      border-radius: 25px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      padding: 0;
+      overflow: hidden;
+    `;
+
+    // Add hover effects
+    settingsButton.addEventListener('mouseover', () => {
+      settingsButton.style.transform = 'scale(1.1)';
+      settingsButton.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.25)';
+    });
+
+    settingsButton.addEventListener('mouseout', () => {
+      settingsButton.style.transform = 'scale(1)';
+      settingsButton.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+    });
+
+    // Add click handler
+    settingsButton.addEventListener('click', () => {
+      this.mcpUI.showServerConfigUI();
+    });
+
+    // Store reference to icon for theme updates
+    settingsButton._mcpIcon = iconImg;
+
+    // Add to page
+    document.body.appendChild(settingsButton);
+
+    console.log('📡 MCP settings button added to page');
+    return settingsButton;
+  }
+
+  /**
+   * Update the button icon based on current theme
+   * @private
+   */
+  _updateButtonIcon(iconImg) {
+    if (!iconImg) return;
+    
+    const currentTheme = this.themeManager?.getCurrentTheme() || 'light';
+    const iconName = currentTheme === 'dark' ? 'icon128_dark.png' : 'icon128.png';
+    iconImg.src = `${this.extensionUrl}assets/${iconName}`;    
+    console.log(`📡 Updated MCP button icon to: ${iconName} (theme: ${currentTheme})`);
+  }
+
+  /**
+   * Remove the MCP settings button
+   */
+  removeMcpSettingsButton() {
+    const existingButton = document.getElementById('mcp-settings-button');
+    if (existingButton) {
+      existingButton.remove();
+      console.log('📡 MCP settings button removed');
+    }
   }
 }
 

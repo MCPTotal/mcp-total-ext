@@ -109,7 +109,7 @@ function copyAssets() {
   printStatus('Copying static assets...', 'info');
   
   // Create assets directory
-  const ICONS_DIR = path.join(DIST_DIR, 'icons');
+  const ICONS_DIR = path.join(DIST_DIR, 'assets');
   fs.mkdirSync(ICONS_DIR, { recursive: true });
   
   // Copy manifest.json
@@ -119,7 +119,7 @@ function copyAssets() {
   );
   
   // Copy icons if they exist
-  const SOURCE_ICONS_DIR = path.join(ROOT_DIR, 'icons');
+  const SOURCE_ICONS_DIR = path.join(ROOT_DIR, 'assets');
   if (fs.existsSync(SOURCE_ICONS_DIR)) {
     fs.readdirSync(SOURCE_ICONS_DIR).forEach(file => {
       fs.copyFileSync(

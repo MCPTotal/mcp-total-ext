@@ -35,11 +35,13 @@ class BrowserMcpClient {
         // Create client instance
         this.client = new Client({
           name: 'browser-mcp-client',
-          version: '1.0.0'
+          version: '1.2.0'
         });
         // Create base URL object
         const url = new URL(this.serverUrl);
-        url.searchParams.set('key', this.authToken);
+        if (this.authToken) {
+          url.searchParams.set('key', this.authToken);
+        }
         this.transport = new StreamableHTTPClientTransport(url);
 
         // Connect to the server
@@ -57,7 +59,7 @@ class BrowserMcpClient {
         // Create new client instance
         this.client = new Client({
           name: 'browser-mcp-client',
-          version: '1.0.0'
+          version: '1.2.0'
         });
         
         // For SSE transport, we MUST use URL parameters for authentication

@@ -76,7 +76,8 @@ const extensionConfig = {
     'src/background/background': './src/background/background.js',
     'src/content/content': './src/content/content.js',
     'src/content/mcp-bridge': './src/content/mcp-bridge.js',
-    'src/page/monitor': './src/page/monitor.js'
+    'src/page/monitor': './src/page/monitor.js',
+    'src/mcptotal/mcpt': './src/mcptotal/mcpt.js'
   },
   output: {
     filename: '[name].js',

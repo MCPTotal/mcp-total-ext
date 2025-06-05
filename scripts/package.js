@@ -58,11 +58,15 @@ safelyAddFile(path.join(distDir, 'src/content/mcp-bridge.js'), 'src/content/mcp-
 // - Page scripts (web accessible resources)
 safelyAddFile(path.join(distDir, 'src/page/monitor.js'), 'src/page/monitor.js');
 
+// - MCPTotal scripts
+safelyAddFile(path.join(distDir, 'src/mcptotal/mcpt.js'), 'src/mcptotal/mcpt.js');
+
+
 
 // Add assets (icons)
-const assetsDir = path.join(distDir, 'icons');
+const assetsDir = path.join(distDir, 'assets');
 if (fs.existsSync(assetsDir)) {
-  archive.directory(assetsDir, 'icons');
+  archive.directory(assetsDir, 'assets');
   console.log('Added: assets directory');
 } else {
   console.warn('Warning: assets directory not found, skipping');

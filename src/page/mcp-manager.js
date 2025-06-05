@@ -2,7 +2,8 @@
 // McpManager Class
 // ==============================
 
-const SERVER_PREFIX = 'MCPT:';
+const MCPT_SERVER_PREFIX = 'MCPT_';
+const MCP_TOOL_SEPARATOR = '-';
 
 class McpManager {
   constructor(toolManager, mcpUI, pageMcpClient) {
@@ -20,7 +21,7 @@ class McpManager {
     // Setup dependencies
     if (this.ui) {
       this.ui.setMcpManager(this);
-      this.ui.setShowServerConfigCallback(() => this.showServerConfigUI());
+      this.ui.setToolManager(this.toolManager);
       
       // Add keyboard shortcut for quick access to server config
       this.ui.setupKeyboardShortcut();
@@ -45,27 +46,30 @@ class McpManager {
 
   mergeMCPTServers(servers) {
     // Update the servers list with the new MCPT servers, keeping enabled status for existing one, and adding new ones as disabled
-    const nonMcptServers = this.servers.filter(server => !server.id.startsWith(SERVER_PREFIX));
+    const nonMcptServers = this.servers.filter(server => !server.id.startsWith(MCPT_SERVER_PREFIX));
     const updatedMcptServers = servers.filter(server => 
-      this.servers.some(existingServer => SERVER_PREFIX + server.name === existingServer.id)
+      this.servers.some(existingServer => MCPT_SERVER_PREFIX + server.name === existingServer.id)
     ).map(server => {
       const existingServer = this.servers.find(
-        existingServer => SERVER_PREFIX + server.name === existingServer.id);
+        existingServer => MCPT_SERVER_PREFIX + server.name === existingServer.id);
       return {
         ...existingServer,
-        id: SERVER_PREFIX + server.name,
+        id: MCPT_SERVER_PREFIX + server.name,
         url: server.endpoint + '/mcp',
         apiKey: server.key,
+        readonly: true, // MCPT servers are read-only
       };
     });
     const newMcptServers = servers
       .filter(newServer => !this.servers.some(existingServer => 
-        existingServer.id === SERVER_PREFIX + newServer.name
+        existingServer.id === MCPT_SERVER_PREFIX + newServer.name
       )).map(server => ({
-        id: SERVER_PREFIX + server.name,
+        id: MCPT_SERVER_PREFIX + server.name,
         url: server.endpoint + '/mcp',
         apiKey: server.key,
-        enabled: true
+        enabled: true,
+        automation: 'manual', // Default automation mode for new MCPT servers
+        readonly: true // MCPT servers are read-only
       }));
 
     this.serversNew = [...nonMcptServers, ...updatedMcptServers, ...newMcptServers];
@@ -99,7 +103,12 @@ class McpManager {
         const parsedServers = JSON.parse(savedServers);
         if (Array.isArray(parsedServers) && parsedServers.length > 0) {
           console.log(`📡 Loaded ${parsedServers.length} server(s) from localStorage`);
-          this.servers = parsedServers;
+          // Ensure all servers have automation field set
+          this.servers = parsedServers.map(server => ({
+            automation: 'manual', // Default automation mode
+            readonly: server.id?.startsWith(MCPT_SERVER_PREFIX) || false, // MCPT servers are readonly, others are not
+            ...server
+          }));
           this.fetchToolsDefinitions();
         }
       } else {
@@ -128,10 +137,10 @@ class McpManager {
   GetBuiltInTools() {
     const builtInTools = [];
     builtInTools.push({
-      name: 'time-get_current',
-      description: 'Get the current date and time',
+      name: 'random-get_random_number',
+      description: 'Get a random number between 0 and 1',
       parameters: {},
-      callback: () => new Date().toISOString(),
+      callback: () => Math.random(),
     });
     return builtInTools;
   }
@@ -147,16 +156,18 @@ class McpManager {
     const existingServerIndex = this.servers.findIndex(server => server.id === serverConfig.id);
 
     if (existingServerIndex >= 0) {
-      // Update existing server config
+      // Update existing server config (preserve readonly status if it exists)
       this.servers[existingServerIndex] = {
         ...this.servers[existingServerIndex],
         ...serverConfig,
       };
       console.log(`📡 Updated MCP server config for ${serverConfig.id}`);
     } else {
-      // Add new server config
+      // Add new server config with defaults (manual servers are not readonly)
       this.servers.push({
         enabled: true,
+        automation: 'manual', // Default automation mode
+        readonly: false, // Manual servers are editable
         ...serverConfig,
       });
       console.log(`📡 Added new MCP server ${serverConfig.id}`);
@@ -203,18 +214,6 @@ class McpManager {
     return [...this.servers];
   }
 
-  /**
-   * Shows a configuration UI for MCP servers
-   * @returns {void}
-   */
-  showServerConfigUI() {
-    if (this.ui) {
-      this.ui.showServerConfigUI();
-    } else {
-      console.error('📡 McpManager: Cannot show server config UI - UI manager not set');
-    }
-  }
-  
   /**
    * Test connection to an MCP server
    * @param {Object} server - Server configuration
@@ -364,13 +363,13 @@ class McpManager {
   async executeMcpTool(toolName, parameters) {
     // Parse server ID and tool name from the full tool name
     // Format: mcp_[serverId]_[toolName]
-    const parts = toolName.split('-');
+    const parts = toolName.split(MCP_TOOL_SEPARATOR);
     if (parts.length < 2) {
       return 'Error: Invalid MCP tool name format. Expected [serverId]-[toolName].';
     }
 
     const serverId = parts[0];
-    const mcpToolName = parts.slice(1).join('_'); // Handle tool names that might contain underscores
+    const mcpToolName = parts.slice(1).join(MCP_TOOL_SEPARATOR); // Handle tool names that might contain underscores
 
     // Find the server
     const server = this.servers.find(s => s.id === serverId);
