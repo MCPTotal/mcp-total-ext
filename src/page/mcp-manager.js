@@ -13,7 +13,7 @@ class McpManager {
     this.pollingInterval = 60000; // How often to refresh tool definitions (in ms)
     this.lastFetchTime = 0;
     this.activeFetch = false;
-    this.STORAGE_KEY = 'mcp_servers';
+    this.STORAGE_KEY = 'MCPT_servers';
     
     // Initialize the UI manager
     this.ui = mcpUI;
@@ -44,52 +44,55 @@ class McpManager {
     });
   }
 
-  mergeMCPTServers(servers) {
-    // Update the servers list with the new MCPT servers, keeping enabled status for existing one, and adding new ones as disabled
-    const nonMcptServers = this.servers.filter(server => !server.id.startsWith(MCPT_SERVER_PREFIX));
-    const updatedMcptServers = servers.filter(server => 
-      this.servers.some(existingServer => MCPT_SERVER_PREFIX + server.name === existingServer.id)
-    ).map(server => {
-      const existingServer = this.servers.find(
-        existingServer => MCPT_SERVER_PREFIX + server.name === existingServer.id);
-      return {
-        ...existingServer,
-        id: MCPT_SERVER_PREFIX + server.name,
-        url: server.endpoint + '/mcp',
-        apiKey: server.key,
-        readonly: true, // MCPT servers are read-only
-      };
-    });
-    const newMcptServers = servers
-      .filter(newServer => !this.servers.some(existingServer => 
-        existingServer.id === MCPT_SERVER_PREFIX + newServer.name
-      )).map(server => ({
-        id: MCPT_SERVER_PREFIX + server.name,
-        url: server.endpoint + '/mcp',
-        apiKey: server.key,
-        enabled: true,
-        automation: 'manual', // Default automation mode for new MCPT servers
-        readonly: true // MCPT servers are read-only
-      }));
+  mergeMCPTServers(updatedServers) {
+    let newServers = this.servers.slice();
+    for (let i = 0; i < updatedServers.length; i++) {
+      const updatedServerName = MCPT_SERVER_PREFIX + updatedServers[i].name;
+      const existingServer = newServers.find(existingServer => existingServer.name === updatedServerName);
+      if (existingServer) {
+        existingServer.name = updatedServerName;
+        existingServer.url = updatedServers[i].endpoint + '/mcp';
+        existingServer.apiKey = updatedServers[i].key;
+      } else {
+        newServers.push({
+          name: updatedServerName,
+          url: updatedServers[i].endpoint + '/mcp',
+          apiKey: updatedServers[i].key,
+          enabled: true,
+          automation: 'manual', // Default automation mode for new MCPT servers
+          readonly: true // MCPT servers are read-only
+        });
+      }      
+    }
 
-    this.serversNew = [...nonMcptServers, ...updatedMcptServers, ...newMcptServers];
-    // Check if there are any changes between this.serversNew and this.servers
-    const hasChanges = this.serversNew.length !== this.servers.length || 
-      this.serversNew.some((newServer, index) => 
+    let toRemove = [];
+    for (let i = 0; i < newServers.length; i++) {
+      const server = newServers[i];
+      if (server.name.startsWith(MCPT_SERVER_PREFIX)) {
+        if (!updatedServers.some(updatedServer => MCPT_SERVER_PREFIX + updatedServer.name === server.name)) {
+          toRemove.push(server);
+        }
+      }
+    }
+
+    for (let i = 0; i < toRemove.length; i++) {
+      newServers.splice(newServers.indexOf(toRemove[i]), 1);
+    }
+    // Check if there are any changes between newServers and this.servers
+    const hasChanges = newServers.length !== this.servers.length || 
+      newServers.some((newServer, index) => 
         JSON.stringify(newServer) !== JSON.stringify(this.servers[index])
       );
 
     if (hasChanges) {
       console.log('📡 Server configuration has changed');
-      this.servers = this.serversNew;
+      this.servers = newServers;
       // Save changes to storage
       this.saveServers();
 
       // Refresh tool definitions
       this.fetchToolsDefinitions();
-      
     }
-
   }
 
   /**
@@ -104,11 +107,7 @@ class McpManager {
         if (Array.isArray(parsedServers) && parsedServers.length > 0) {
           console.log(`📡 Loaded ${parsedServers.length} server(s) from localStorage`);
           // Ensure all servers have automation field set
-          this.servers = parsedServers.map(server => ({
-            automation: 'manual', // Default automation mode
-            readonly: server.id?.startsWith(MCPT_SERVER_PREFIX) || false, // MCPT servers are readonly, others are not
-            ...server
-          }));
+          this.servers = parsedServers;
           this.fetchToolsDefinitions();
         }
       } else {
@@ -139,8 +138,13 @@ class McpManager {
     builtInTools.push({
       name: 'random-get_random_number',
       description: 'Get a random number between 0 and 1',
-      parameters: {},
-      callback: () => Math.random(),
+      className: 'Random',
+      parameters: {'min': {'type': 'number', 'description': 'The minimum value'}, 'max': {'type': 'number', 'description': 'The maximum value'}},
+      callback: (params) => {
+        const min = params.min || 0;
+        const max = params.max || 1;
+        return Math.random() * (max - min) + min;
+      },
     });
     return builtInTools;
   }
@@ -153,7 +157,7 @@ class McpManager {
     const client = new this.pageMcpClient(serverConfig.url);
     await client.requestPermission(pattern);
 
-    const existingServerIndex = this.servers.findIndex(server => server.id === serverConfig.id);
+    const existingServerIndex = this.servers.findIndex(server => server.name === serverConfig.name);
 
     if (existingServerIndex >= 0) {
       // Update existing server config (preserve readonly status if it exists)
@@ -161,7 +165,7 @@ class McpManager {
         ...this.servers[existingServerIndex],
         ...serverConfig,
       };
-      console.log(`📡 Updated MCP server config for ${serverConfig.id}`);
+      console.log(`📡 Updated MCP server config for ${serverConfig.name}`);
     } else {
       // Add new server config with defaults (manual servers are not readonly)
       this.servers.push({
@@ -170,7 +174,7 @@ class McpManager {
         readonly: false, // Manual servers are editable
         ...serverConfig,
       });
-      console.log(`📡 Added new MCP server ${serverConfig.id}`);
+      console.log(`📡 Added new MCP server ${serverConfig.name}`);
     }
 
     // Save changes to storage
@@ -183,7 +187,7 @@ class McpManager {
   }
 
   removeServer(serverId) {
-    const index = this.servers.findIndex(s => s.id === serverId);
+    const index = this.servers.findIndex(s => s.name === serverId);
     if (index >= 0) {
       this.servers.splice(index, 1);
       console.log(`📡 Removed MCP server ${serverId}`);
@@ -197,7 +201,7 @@ class McpManager {
   }
 
   setServerStatus(serverId, enabled) {
-    const server = this.servers.find(s => s.id === serverId);
+    const server = this.servers.find(s => s.name === serverId);
     if (server) {
       server.enabled = !!enabled;
       console.log(`📡 Set MCP server ${serverId} status to ${enabled ? 'enabled' : 'disabled'}`);
@@ -235,8 +239,8 @@ class McpManager {
       return tools;
 
     } catch (error) {
-      console.error(`📡 Connection test failed for ${server.id}:`, error);
-      throw new Error(`Connection failed: ${error.message}`);
+      console.error(`📡 Connection test failed for ${server.name}:`, error);
+      //throw new Error(`Connection failed: ${error.message}`);
     }
   }
 
@@ -260,23 +264,23 @@ class McpManager {
       // Add MCP tools for each enabled server
       for (const server of enabledServers) {
         try {
-          console.log(`📡 Fetching tools for MCP server ${server.id} from ${server.url}`);
+          console.log(`📡 Fetching tools for MCP server ${server.name} from ${server.url}`);
           
           let toolDefinitions = [];
           
           // Try to fetch real tool definitions from the server
           try {
             toolDefinitions = await this.fetchToolsFromServer(server);
-            //console.log(`📡 Successfully fetched ${toolDefinitions.length} tools from ${server.id}`);
+            //console.log(`📡 Successfully fetched ${toolDefinitions.length} tools from ${server.name}`);
           } catch (error) {
-            console.warn(`📡 Error fetching tools from server ${server.id}:`, error);
+            console.warn(`📡 Error fetching tools from server ${server.name}:`, error);
           }
 
 
           // Process and add each tool with the server prefix
           toolDefinitions.forEach(tool => {
             // Create a standardized tool definition
-            const mcpToolName = `${server.id}-${tool.name}`;
+            const mcpToolName = `${server.name}-${tool.name}`;
             const description = `${tool.description}`;
             const parameters = tool.parameters || {};
 
@@ -286,6 +290,7 @@ class McpManager {
             // Register the tool
             tools.push({
               name: mcpToolName,
+              className: tool.name.split('_').length > 1 ? tool.name.split('_')[0] : server.name,
               description,
               parameters,
               callback
@@ -293,9 +298,9 @@ class McpManager {
           });
 
 
-          //console.log(`📡 Added ${toolDefinitions.length} tools for MCP server ${server.id}:`, tools);
+          //console.log(`📡 Added ${toolDefinitions.length} tools for MCP server ${server.name}:`, tools);
         } catch (error) {
-          console.error(`📡 Error processing tools from MCP server ${server.id}:`, error);
+          console.error(`📡 Error processing tools from MCP server ${server.name}:`, error);
         }
       }
       this.toolManager.updateTools(tools);
@@ -356,7 +361,8 @@ class McpManager {
       }));
     } catch (error) {
       console.warn(`📡 Error fetching tools from ${server.url}:`, error);
-      throw error;
+      //throw error;
+      return [];
     }
   }
 
@@ -372,7 +378,7 @@ class McpManager {
     const mcpToolName = parts.slice(1).join(MCP_TOOL_SEPARATOR); // Handle tool names that might contain underscores
 
     // Find the server
-    const server = this.servers.find(s => s.id === serverId);
+    const server = this.servers.find(s => s.name === serverId);
     if (!server) {
       return `Error: MCP server with ID '${serverId}' not found.`;
     }
@@ -419,7 +425,8 @@ class McpManager {
       
     } catch (error) {
       console.error(`📡 Error executing tool on ${server.url}:`, error);
-      throw error;
+      //throw error;
+      return "Error executing tool on server " + server.name + ": " + error.message;
     }
   }
 }

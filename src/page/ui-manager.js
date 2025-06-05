@@ -150,7 +150,7 @@ class UIManager {
   // Load tool preferences from localStorage
   loadToolPreferences() {
     try {
-      const savedPrefs = localStorage.getItem('mcpToolPreferences');
+      const savedPrefs = localStorage.getItem('MCPT_ToolPreferences');
       if (savedPrefs) {
         this.toolPreferences = JSON.parse(savedPrefs);
         console.log('📡 Loaded tool preferences:', this.toolPreferences);
@@ -163,7 +163,7 @@ class UIManager {
   // Save tool preferences to localStorage
   saveToolPreferences() {
     try {
-      localStorage.setItem('mcpToolPreferences', JSON.stringify(this.toolPreferences));
+      localStorage.setItem('MCPT_ToolPreferences', JSON.stringify(this.toolPreferences));
     } catch (e) {
       console.error('📡 Error saving tool preferences:', e);
     }

@@ -3,62 +3,58 @@
 // ==============================
 class ToolManager {
   // Static properties
-  static TOOL_PREFIX = 'TOOL:';
+  static TOOL_PREFIX = '### ';
   static TOOL_PARAMS_PREFIX = 'PARAMS:';
   static SYSTEM_PROMPT_SEPARATOR = '===TOOLS-INSTRUCTIONS==='; // Add separator constant
   static SYSTEM_PROMPT_SEPARATOR_END = '===TOOLS-END===';
-  static SYSTEM_PROMPT = `You have access to tools that I (the user) can run for you. You do NOT execute tools directly — instead, reply using the format below so I can run them and return the result.
+  static SYSTEM_PROMPT = `You have access to tools that I (the user) can run for you. You don’t execute them — instead, respond using a specific format so I can run the tool and return the result.
 
----
+## 🚨 Tool Call Format
 
-### 🔧 Tool Call Format (STRICT)
-
-Reply with tool calls ONLY in this exact format:
+You must reply with tool usage in this exact format:
 [TOOL_CALL]{"tool": "prefix-tool_name", "parameters": {"param1": "value1"}}[/TOOL_CALL]
 
-- Tags [TOOL_CALL] and [/TOOL_CALL] must be exact.
-- Use valid JSON.
-- Include full tool name (e.g., with 'MCPT:' prefix).
-- No other content or formatting.
+- Format must be exact. Tags and JSON must match perfectly.
+- No text, markdown, or explanation outside the tags.
+- Include the full tool name (with prefix like "MCPT:").
+
+❗ If the format is wrong, the tool will NOT run.
 
 ---
 
-### 🔁 One at a Time
+## 🔁 One Tool Call at a Time
 
-Reply with ONE tool call per message.  
-After that, STOP and wait for my reply with the result.  
-Then continue based on that result. No batching.
+Only include one tool call per message.  
+Stop your reply after it — do not include explanations, conclusions, or follow-up actions.  
+Wait for my reply before continuing with the next step.
 
----
-
-### 🧭 IDs & Follow-ups
-
-- If an \`id\` (e.g. \`page_id\`) is missing, call another tool to get it.
-- If a result includes an ID, call another tool to resolve it to a readable name before replying.
-- Never guess IDs. Ask if needed.
-- Translate IDs to names in user-facing replies when possible.
+## 🧭 ID Handling
+- If a required \`id\` (like \`page_id\`, \`block_id\`) is missing, first use a tool to retrieve it.
+- If a result includes an ID, use another tool to resolve it to a human-readable value before replying.
+- Don’t guess or hardcode IDs. Ask only if you can't retrieve it.
 
 ---
 
-### ✅ Behavior
+## ⚙️ Chaining & Completion
 
-- Be proactive. Complete tasks end-to-end.
-- Prefer tool calls over questions if info can be looked up.
-- Don’t mention tool names in replies — describe actions naturally.
+- Use tools to complete the full task, one step at a time.
+- Often you’ll need to chain multiple tools (e.g., search → get ID → call → confirm).
 - Don’t simulate tool results.
-- Use only tools I provide.
+- Describe actions naturally, without referencing tool names.
 
-Respond with tool calls when needed, and always wait for my response before continuing.
+---
 
-### 🔧 Available Tools:
+Respond using tool calls whenever helpful.  
+Always wait for my reply before continuing.
+Only use tools explicitly listed in the registry I provide.
 
-`;
+# 🔧 Available Tools:`;
 
   constructor(uiManager, platformAdapter) {
     this.uiManager = uiManager;
     this.platformAdapter = platformAdapter;
     
-    this.toolDefinitions = [];
+    this.toolDefinitions = new Map(); // Map from class name to array of tools
     this.toolsDefinitionChanged = false;
     
     // Track processed nodes to avoid duplication
@@ -72,44 +68,46 @@ Respond with tool calls when needed, and always wait for my response before cont
     this.setupDOMObserver();
   }
 
-  registerTool(name, description, parameters, callback) {
-    // Check if tool already exists
-    const existingIndex = this.toolDefinitions.findIndex(tool => tool.name === name);
-
-    const toolDefinition = {
-      name,
-      description,
-      parameters: parameters || {},
-      callback,
-    };
+  _registerTool(toolDefinition) {
+    const className = toolDefinition.className || 'default';
+    
+    // Get or create the tools array for this class
+    if (!this.toolDefinitions.has(className)) {
+      this.toolDefinitions.set(className, []);
+    }
+    
+    const classTools = this.toolDefinitions.get(className);
+    
+    // Check if tool already exists in this class
+    const existingIndex = classTools.findIndex(tool => tool.name === toolDefinition.name);
 
     if (existingIndex >= 0) {
       // Update existing tool
-      this.toolDefinitions[existingIndex] = toolDefinition;
+      classTools[existingIndex] = toolDefinition;
     } else {
       // Add new tool
-      this.toolDefinitions.push(toolDefinition);
+      classTools.push(toolDefinition);
     }
-
-    //console.log(`📡 Registered tool: ${name}`);
-
-    return toolDefinition;
   }
   
   updateTools(tools) {
+    // Calculate total count of existing tools
+    const existingToolCount = Array.from(this.toolDefinitions.values())
+      .reduce((sum, classTools) => sum + classTools.length, 0);
+    
     // Simple check to avoid updates if nothing changed
-    if (tools.length === this.toolDefinitions.length) {
+    if (tools.length === existingToolCount) {
       // Check if all tools match
       let allMatch = true;
       
-      for (let i = 0; i < tools.length; i++) {
-        const newTool = tools[i];
+      for (const newTool of tools) {
         // Try to find a matching tool in current definitions
-        const existingTool = this.toolDefinitions.find(t => t.name === newTool.name);
+        const existingTool = this.getToolByName(newTool.name);
         
         // If no matching tool or properties differ, tools have changed
         if (!existingTool || 
             existingTool.description !== newTool.description || 
+            existingTool.className !== newTool.className ||
             JSON.stringify(existingTool.parameters || {}) !== 
               JSON.stringify(newTool.parameters || {})) {
           allMatch = false;
@@ -125,21 +123,29 @@ Respond with tool calls when needed, and always wait for my response before cont
     
     // If different, update with the new tools
     console.log('📡 Updating tools with new list');
-    this.toolDefinitions = [];
+    this.toolDefinitions.clear();
     for (const tool of tools) {
-      this.registerTool(
-        tool.name, 
-        tool.description, 
-        tool.parameters, 
-        tool.callback
-      );
+      this._registerTool(tool);
     }
     this.toolsDefinitionChanged = true;
     return true;
   }
 
   getToolByName(name) {
-    return this.toolDefinitions.find(tool => tool.name === name);
+    // Search through all classes for the tool
+    for (const classTools of this.toolDefinitions.values()) {
+      const tool = classTools.find(tool => tool.name === name);
+      if (tool) {
+        return tool;
+      }
+    }
+    return undefined;
+  }
+  
+  getToolsByPrefix(prefix) {
+    return Array.from(this.toolDefinitions.values())
+      .flatMap(classTools => classTools.filter(tool => tool.name.startsWith(prefix)))
+      .map(tool => tool.name);
   }
 
   executeToolCall(toolName, parameters) {
@@ -357,16 +363,36 @@ Respond with tool calls when needed, and always wait for my response before cont
   }
   
   getToolsDefinitions() {
-    return this.toolDefinitions.map(tool => {
-      let params = '';
-      if (tool.parameters && Object.keys(tool.parameters).length > 0) {
-        params = Object.entries(tool.parameters)
-          .map(([name, param]) => `\t* ${name}: ${param.description}`)
-          .join('\n');
-        params = `\n${ToolManager.TOOL_PARAMS_PREFIX}\n${params}`;
-      }
-      return `${ToolManager.TOOL_PREFIX} ${tool.name}: ${tool.description}${params}`;
-    });
+    const sections = [];
+    
+    // Sort class names for consistent output
+    const sortedClassNames = Array.from(this.toolDefinitions.keys()).sort();
+    
+    for (const className of sortedClassNames) {
+      const classTools = this.toolDefinitions.get(className);
+      if (classTools.length === 0) continue;
+      
+      // Add class header
+      sections.push(`## ${className.toUpperCase()} TOOLS`);
+      
+      // Add tools for this class
+      const toolDefinitions = classTools.map(tool => {
+        let params = '';
+        if (tool.parameters && Object.keys(tool.parameters).length > 0) {
+          params = Object.entries(tool.parameters)
+            .map(([name, param]) => `\t* "${name}" : ${param.description}`)
+            .join('\n');
+          params = `\n${ToolManager.TOOL_PARAMS_PREFIX}\n${params}`;
+        }
+        const definition = `${ToolManager.TOOL_PREFIX}${tool.name}\n${tool.description}${params}\n`;
+        return definition;
+      });
+      
+      sections.push(...toolDefinitions);
+      sections.push(''); // Add empty line between sections
+    }
+    
+    return sections;
   }
   
   // Checks if a node has already been processed with the current content
@@ -567,6 +593,21 @@ Respond with tool calls when needed, and always wait for my response before cont
         }
       }
     }    
+  }
+
+  updateServerAutomation(serverId, automation) {
+    console.log(`📡 Updating server automation for ${serverId} to ${automation}`);
+     // Get all tools from this server (tools are prefixed with server ID)
+     const serverPrefix = `${serverId}`;
+     const affectedTools = this.getToolsByPrefix(serverPrefix);
+ 
+     console.log(`📡 Applying automation "${automation}" to ${affectedTools.length} tools from server "${serverId}"`);
+ 
+     // Apply automation preference to each tool
+     affectedTools.forEach(toolName => {
+       this.uiManager.setToolPreference(toolName, { mode: automation });
+       console.log(`📡 Set tool "${toolName}" to automation mode: ${automation}`);
+     });
   }
 }
 

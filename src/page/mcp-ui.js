@@ -211,7 +211,7 @@ class McpUI {
 
           const serverInfo = document.createElement('div');
           serverInfo.innerHTML = `
-            <div style="font-weight: bold;">${server.id}</div>
+            <div style="font-weight: bold;">${server.name}</div>
             <div style="font-size: 12px; color: ${this.colors.textSecondary}; margin-top: 4px;">${server.url}</div>
           `;
 
@@ -241,7 +241,7 @@ class McpUI {
           // Add click handler for status toggle
           statusElement.onclick = (e) => {
             e.stopPropagation(); // Prevent item click
-            this.mcpManager.setServerStatus(server.id, !server.enabled);
+            this.mcpManager.setServerStatus(server.name, !server.enabled);
             renderServerList();
           };
 
@@ -295,7 +295,7 @@ class McpUI {
             
             // Apply automation preferences to existing tools from this server
             if (this.toolManager) {
-              this.applyServerAutomationToTools(server.id, nextMode);
+              this.applyServerAutomationToTools(server.name, nextMode);
             }
             
             renderServerList();
@@ -353,8 +353,8 @@ class McpUI {
           if (!isReadOnly) {
             deleteBtn.onclick = (e) => {
               e.stopPropagation(); // Prevent item click
-              if (confirm(`Are you sure you want to delete the server "${server.id}"?`)) {
-                this.mcpManager.removeServer(server.id);
+              if (confirm(`Are you sure you want to delete the server "${server.name}"?`)) {
+                this.mcpManager.removeServer(server.name);
                 renderServerList();
               }
             };
@@ -453,9 +453,9 @@ class McpUI {
         try {
           const tools = await this.mcpManager.testServerConnection(server);
           const toolNames = tools.map(tool => tool.name).join(', ');
-          results.push(`✅ ${server.id}: ${tools.length} tools found (${toolNames})`);
+          results.push(`✅ ${server.name}: ${tools.length} tools found (${toolNames})`);
         } catch (error) {
-          results.push(`❌ ${server.id}: ${error.message}`);
+          results.push(`❌ ${server.name}: ${error.message}`);
         }
       }
 
@@ -561,7 +561,7 @@ class McpUI {
         <div style="margin-bottom: 12px;">
           <label style="display: block; margin-bottom: 4px; font-weight: bold; color: ${this.colors.text};">Server ID:</label>
           <input type="text" id="server-id" ${isEditing ? 'disabled' : ''} 
-            value="${isEditing ? serverToEdit.id : ''}" 
+            value="${isEditing ? serverToEdit.name : ''}" 
             style="width: 100%; padding: 6px; border: 1px solid ${this.colors.border}; border-radius: 4px; background: ${this.colors.backgroundInput}; color: ${this.colors.text};">
           <div style="font-size: 11px; color: ${this.colors.textSecondary}; margin-top: 2px;">
             Unique identifier for this server. Cannot be changed once created.
@@ -643,7 +643,7 @@ class McpUI {
 
         // Create server config object
         const serverConfig = {
-          id,
+          name: id,
           url,
           apiKey,
           automation,
@@ -881,22 +881,7 @@ class McpUI {
       console.warn('📡 McpUI: No toolManager reference set');
       return;
     }
-
-    // Get all tools from this server (tools are prefixed with server ID)
-    const serverPrefix = `${serverId}:`;
-    const affectedTools = this.toolManager.toolDefinitions
-      .filter(tool => tool.name.startsWith(serverPrefix))
-      .map(tool => tool.name);
-
-    console.log(`📡 Applying automation "${automation}" to ${affectedTools.length} tools from server "${serverId}"`);
-
-    // Apply automation preference to each tool
-    affectedTools.forEach(toolName => {
-      if (this.toolManager.uiManager) {
-        this.toolManager.uiManager.setToolPreference(toolName, { mode: automation });
-        console.log(`📡 Set tool "${toolName}" to automation mode: ${automation}`);
-      }
-    });
+    this.toolManager.updateServerAutomation(serverId, automation);
   }
 
   /**
