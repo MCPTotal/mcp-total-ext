@@ -157,15 +157,23 @@ class PageMcpClient {
   }
   
 
-  async requestPermission(pattern) {
-    console.log(`Requesting permission for ${pattern}`);
+  async requestPermission() {
+    console.log(`Requesting permission for ${this.serverUrl}`);
     try { 
-      return await sendMcpMessage('requestPermission', { pattern });
+      return await sendMcpMessage('requestPermission', { url: this.serverUrl });
     } catch (error) {
       throw new Error(`MCP request permission error: ${error.message}`);
     }
   }
-  
+
+  async checkPermission() {
+    console.log(`Checking permission for ${this.serverUrl}`);
+    try {
+      return await sendMcpMessage('checkPermission', { url: this.serverUrl });
+    } catch (error) {
+      throw new Error(`MCP check permission error: ${error.message}`);
+    }
+  }
   /**
    * Call a tool on the MCP server
    * @param {string|object} toolOptions Tool name or options object

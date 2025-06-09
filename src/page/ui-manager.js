@@ -966,13 +966,13 @@ class UIManager {
   /**
    * Create theme-aware system prompt toggle UI
    */
-  createSystemPromptToggle(userMessage, toolDefinitions, parentElement, deepestNode) {
+  createSystemPromptToggle(blockDescription, toolDefinitions, parentElement, deepestNode) {
     console.log('🎨 Creating system prompt toggle with theme:', this.themeManager?.getCurrentTheme());
     
     // Create toggle button with theme-aware styling
     const toggleButton = document.createElement('button');
     toggleButton.className = 'tool-definitions-toggle';
-    toggleButton.textContent = '[Show tool definitions]';
+    toggleButton.textContent = `[Show ${blockDescription}]`;
     toggleButton.style.cssText = `
       background-color: transparent !important;
       border: none !important;
@@ -1021,7 +1021,7 @@ class UIManager {
       e.stopPropagation();
       const isHidden = toolDefElement.style.display === 'none';
       toolDefElement.style.display = isHidden ? 'block' : 'none';
-      toggleButton.textContent = isHidden ? '[Hide tool definitions]' : '[Show tool definitions]';
+      toggleButton.textContent = isHidden ? `[Hide ${blockDescription}]` : `[Show ${blockDescription}]`;
     });
     
     // Insert the toggle button after the modified text node

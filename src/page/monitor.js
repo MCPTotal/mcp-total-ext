@@ -113,7 +113,7 @@
         console.error('📡 Error initializing debug monitor:', error);
       }
 
-      const tests = true;
+      const tests = false;
       if (tests) {
         console.log('<<<<<<< Running tests <<<<<<<');
         const platformTest = await importModule('src/page/platform-test.js');
@@ -186,9 +186,6 @@
       window.mcpUI = mcpUI;
     }
 
-    // Start MCP polling
-    mcpManager.startPolling();
-
     // Listen for messages from content script
     window.addEventListener('message', function (event) {
       if (event.source !== window) return;
@@ -199,6 +196,6 @@
     });
 
     // Send startup message
-    sendContentMessage('MONITOR_STARTED', { version: '1.2.1' });
+    sendContentMessage('MONITOR_STARTED', { version: '1.3.0' });
   }
 })(); 

@@ -35,14 +35,22 @@ class BrowserMcpClient {
         // Create client instance
         this.client = new Client({
           name: 'browser-mcp-client',
-          version: '1.2.1'
+          version: '1.3.0'
         });
         // Create base URL object
         const url = new URL(this.serverUrl);
+        console.log('Connecting to MCP server using StreamableHTTP transport:', this.serverUrl, this.authToken);
         if (this.authToken) {
-          url.searchParams.set('key', this.authToken);
+          this.transport = new StreamableHTTPClientTransport(url, {
+            requestInit: {
+              headers: { authorization: 'Bearer ' + this.authToken }
+            },
+          });
         }
-        this.transport = new StreamableHTTPClientTransport(url);
+        else {
+          this.transport = new StreamableHTTPClientTransport(url);
+        }
+        console.log('Connecting to MCP server using StreamableHTTP transport:', this.serverUrl, this.transport);
 
         // Connect to the server
         await this.client.connect(this.transport);
@@ -59,7 +67,7 @@ class BrowserMcpClient {
         // Create new client instance
         this.client = new Client({
           name: 'browser-mcp-client',
-          version: '1.2.1'
+          version: '1.3.0'
         });
         
         // For SSE transport, we MUST use URL parameters for authentication
@@ -114,14 +122,93 @@ class BrowserMcpClient {
     }
 
     try {
-      const toolsResponse = await this.client.listTools();
-      this.tools = toolsResponse.tools || [];
+      // Get all tools with proper pagination support
+      this.tools = await this._getAllTools();
       console.log('Available tools:', this.tools);
       return this.tools;
     } catch (error) {
       console.error('Error listing tools:', error);
       throw error;
     }
+  }
+
+  /**
+   * Generic pagination function for MCP list operations
+   * @param {Function} clientMethod - The client method to call (e.g., this.client.listTools)
+   * @param {string} responseProperty - The property to extract from response (e.g., 'tools', 'resources', 'prompts')
+   * @param {string} resourceName - Name for logging (e.g., 'tools', 'resources', 'prompts')
+   * @returns {Promise<Array>} Array of all items
+   */
+  async _paginateRequest(clientMethod, responseProperty, resourceName) {
+    const allItems = [];
+    let cursor = null;
+    let hasMore = true;
+    let pageCount = 0;
+    const maxPages = 100; // Safety limit to prevent infinite loops
+
+    console.log(`📡 Fetching ${resourceName} with pagination support...`);
+
+    while (hasMore && pageCount < maxPages) {
+      try {
+        const requestParams = {};
+        
+        // Add cursor for pagination if we have one
+        if (cursor) {
+          requestParams.cursor = cursor;
+        }
+
+        console.log(`📡 Fetching ${resourceName} page ${pageCount + 1}${cursor ? ` (cursor: ${cursor.substring(0, 20)}...)` : ''}`);
+        
+        const response = await clientMethod.call(this.client, requestParams);
+        
+        if (!response) {
+          console.warn(`📡 No response received from ${clientMethod.name}`);
+          break;
+        }
+
+        const items = response[responseProperty] || [];
+        allItems.push(...items);
+        
+        console.log(`📡 Page ${pageCount + 1}: Found ${items.length} ${resourceName} (total: ${allItems.length})`);
+
+        // Check pagination info
+        cursor = response.nextCursor || null;
+        hasMore = Boolean(cursor);
+        pageCount++;
+
+        // Add a small delay between requests to be respectful to the server
+        if (hasMore && pageCount < maxPages) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
+      } catch (error) {
+        console.error(`📡 Error fetching ${resourceName} page ${pageCount + 1}:`, error);
+        
+        // If it's the first page, re-throw the error
+        if (pageCount === 0) {
+          throw error;
+        }
+        
+        // For subsequent pages, log the error and stop pagination
+        console.warn(`📡 Stopping pagination due to error on page ${pageCount + 1}`);
+        break;
+      }
+    }
+
+    if (pageCount >= maxPages) {
+      console.warn(`📡 Reached maximum page limit (${maxPages}), there may be more ${resourceName} available`);
+    }
+
+    console.log(`📡 Pagination complete: ${allItems.length} ${resourceName} found across ${pageCount} pages`);
+    return allItems;
+  }
+
+  /**
+   * Get all tools from the server with proper pagination support
+   * @returns {Promise<Array>} Array of all available tools
+   */
+  async _getAllTools() {
+    return this._paginateRequest(this.client.listTools, 'tools', 'tools');
   }
 
   // Call a tool with parameters
@@ -181,13 +268,21 @@ class BrowserMcpClient {
     }
     
     try {
-      const response = await this.client.listResources();
-      console.log('Available resources:', response);
-      return response.resources || [];
+      const allResources = await this._getAllResources();
+      console.log('Available resources:', allResources);
+      return allResources;
     } catch (error) {
       console.error('Error listing resources:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get all resources from the server with proper pagination support
+   * @returns {Promise<Array>} Array of all available resources
+   */
+  async _getAllResources() {
+    return this._paginateRequest(this.client.listResources, 'resources', 'resources');
   }
   
   // Get a prompt
@@ -217,13 +312,21 @@ class BrowserMcpClient {
     }
     
     try {
-      const response = await this.client.listPrompts();
-      console.log('Available prompts:', response);
-      return response.prompts || [];
+      const allPrompts = await this._getAllPrompts();
+      console.log('Available prompts:', allPrompts);
+      return allPrompts;
     } catch (error) {
       console.error('Error listing prompts:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get all prompts from the server with proper pagination support
+   * @returns {Promise<Array>} Array of all available prompts
+   */
+  async _getAllPrompts() {
+    return this._paginateRequest(this.client.listPrompts, 'prompts', 'prompts');
   }
   
   // Get the current transport type

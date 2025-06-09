@@ -32,6 +32,6 @@
       console.error('🏠 Error monitoring spaces:', error);
     }
   }
-  setInterval(monitorSpaces, 3000);
+  setInterval(monitorSpaces, 2000);
 
 })();

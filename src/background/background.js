@@ -28,7 +28,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         const servers = await getStoredMcpServers();
-        console.log('🔍 Stored MCP servers2:', servers);
         sendResponse({ success: true, servers });
       } catch (error) {
         console.error('Get stored MCP servers error:', error);
@@ -80,7 +79,10 @@ async function handleMcpRequest(action, params) {
       );
     
     case 'requestPermission':
-      return requestPermission(params.pattern);
+      return requestPermission(params.url);
+    
+    case 'checkPermission':
+      return checkPermission(params.url);
       
     default:
       throw new Error(`Unknown MCP action: ${action}`);
@@ -88,11 +90,26 @@ async function handleMcpRequest(action, params) {
 }
 
 // Request permission
-async function requestPermission(pattern) {
-  console.log(`Background: Requesting permission for ${pattern}`);
+async function requestPermission(url) {
+  const urlObj = new URL(url);
+  const pattern = `${urlObj.protocol}//${urlObj.hostname}${urlObj.port ? ':' + urlObj.port : ''}/*`;
+  console.log(`Background: requestPermission - requesting permission for ${pattern}`);
   return new Promise((resolve) => {
     chrome.permissions.request({ origins: [pattern] }, (granted) => {
-      console.log(`Background: Permission ${granted ? 'granted' : 'denied'} for ${pattern}`);
+      console.log(`Background: requestPermission - Permission ${granted ? 'granted' : 'denied'} for ${pattern}`);
+      resolve(granted);
+    });
+  });
+}
+
+async function checkPermission(url) {
+  const urlObj = new URL(url);
+  const pattern = `${urlObj.protocol}//${urlObj.hostname}${urlObj.port ? ':' + urlObj.port : ''}/*`;
+
+  console.log(`Background: checkPermission - checking permission for ${pattern}`);
+  return new Promise((resolve) => {
+    chrome.permissions.contains({ origins: [pattern] }, (granted) => {
+      console.log(`Background: checkPermission - Permission ${granted ? 'granted' : 'denied'} for ${pattern}`);
       resolve(granted);
     });
   });
@@ -104,7 +121,15 @@ async function connectToMcp(url, authToken) {
     throw new Error('URL is required');
   }
   
+  // Check if permission exists (don't auto-request - user must explicitly grant)
+  const hasPermission = await checkPermission(url);
+  if (!hasPermission) {
+    throw new Error('Permission required for ' + url + '. Please grant permission first.');
+  }
+
   try {
+    console.log('🔌 Creating MCP client for URL:', url);
+    
     // Create client
     const client = new MCPClient.Client(url);
     
@@ -115,6 +140,7 @@ async function connectToMcp(url, authToken) {
     
     // Connect to server
     await client.connect();
+    console.log('✅ Successfully connected to MCP server');
     
     // Generate client ID
     const clientId = Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -124,7 +150,13 @@ async function connectToMcp(url, authToken) {
     
     return { clientId };
   } catch (error) {
-    console.error('Error connecting to MCP server:', error);
+    console.error('❌ Error connecting to MCP server:', error);
+    console.error('❌ Error details:', {
+      message: error.message,
+      stack: error.stack,
+      url: url,
+      authToken: authToken ? 'present' : 'missing'
+    });
     throw error;
   }
 }
@@ -198,7 +230,8 @@ async function handleStoreMcpServers(servers, source) {
     console.log(`Background: Stored ${servers.length} MCP servers from ${source}`);
 
     // Broadcast update to all content scripts
-    await broadcastMcpServerUpdate(servers, source);
+    // we don't have the "tabs" permission, so we don't broadcast the update to the content scripts
+    //await broadcastMcpServerUpdate(servers, source);
 
     return { 
       stored: servers.length, 
@@ -212,6 +245,7 @@ async function handleStoreMcpServers(servers, source) {
 }
 
 // Broadcast MCP server updates to all content scripts
+/*
 async function broadcastMcpServerUpdate(servers, source) {
   try {
     console.log(`Background: Broadcasting MCP server update from ${source}`, servers);
@@ -241,12 +275,12 @@ async function broadcastMcpServerUpdate(servers, source) {
     throw error;
   }
 }
+*/
 
 // Get stored MCP servers (utility function for other parts of the extension)
 async function getStoredMcpServers() {
   try {
     const data = await chrome.storage.local.get(['mcptServers']);
-    console.log('🔍 Stored MCP servers1:', data);
     return data.mcptServers || [];
   } catch (error) {
     console.error('Error getting stored MCP servers:', error);

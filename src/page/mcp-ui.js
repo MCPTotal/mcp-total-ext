@@ -276,9 +276,9 @@ class McpUI {
           `;
           
           // Add click handler for status toggle
-          statusElement.onclick = (e) => {
+          statusElement.onclick = async (e) => {
             e.stopPropagation(); // Prevent item click
-            this.mcpManager.setServerStatus(server.name, !server.enabled);
+            await this.mcpManager.setServerStatus(server.name, !server.enabled);
             renderServerList();
           };
 
@@ -327,8 +327,7 @@ class McpUI {
             }
             
             // Update server automation
-            const updatedServer = { ...server, automation: nextMode };
-            await this.mcpManager.addServer(updatedServer);
+            await this.mcpManager.setServerAutomation(server.name, nextMode);
             
             // Apply automation preferences to existing tools from this server
             if (this.toolManager) {
@@ -458,6 +457,7 @@ class McpUI {
         });
       }
     };
+    this.renderServerList = renderServerList;
 
     // Create "Add Server" button
     const addButton = document.createElement('button');
@@ -517,6 +517,13 @@ class McpUI {
       testConnectionButton.style.animation = 'spin 1s linear infinite';
       testConnectionButton.disabled = true;
       testConnectionButton.title = 'Testing connections...';
+      setTimeout(() => {
+        // Restore button state
+        testConnectionButton.innerHTML = originalContent;
+        testConnectionButton.style.animation = '';
+        testConnectionButton.disabled = false;
+        testConnectionButton.title = 'Test all connections';
+      }, 1000);
 
       // Add keyframes for spin animation if not already added
       if (!document.querySelector('#spin-keyframes')) {
@@ -525,29 +532,8 @@ class McpUI {
         style.textContent = '@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
         document.head.appendChild(style);
       }
-
-      // Test each enabled server
-      const results = [];
-      const enabledServers = this.mcpManager.servers.filter(s => s.enabled);
-      
-      for (const server of enabledServers) {
-        try {
-          const tools = await this.mcpManager.testServerConnection(server);
-          const toolNames = tools.map(tool => tool.name).join(', ');
-          results.push(`✅ ${server.name}: ${tools.length} tools found (${toolNames})`);
-        } catch (error) {
-          results.push(`❌ ${server.name}: ${error.message}`);
-        }
-      }
-
-      // Display results
-      await this.showAlert(results.join('\n'), 'Connection Test Results');
-
-      // Restore button state
-      testConnectionButton.innerHTML = originalContent;
-      testConnectionButton.style.animation = '';
-      testConnectionButton.disabled = false;
-      testConnectionButton.title = 'Test all connections';
+      await this.mcpManager.fetchToolsDefinitions();
+      renderServerList();
     };
 
     // Add hover effects for testConnectionButton

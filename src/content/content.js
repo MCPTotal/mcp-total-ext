@@ -26,6 +26,7 @@ async function updateMcptServers(servers) {
 }
 
 async function initMonitor() {
+  // this is to avoid the "tabs" permission
   setInterval(async () => {
     chrome.runtime.sendMessage({ type: 'GET_STORED_MCPT_SERVERS' }, (response) => {
       updateMcptServers(response.servers);

@@ -11,7 +11,6 @@ class McpManager {
     this.servers = [
     ];
     this.pollingInterval = 60000; // How often to refresh tool definitions (in ms)
-    this.lastFetchTime = 0;
     this.activeFetch = false;
     this.STORAGE_KEY = 'MCPT_servers';
     
@@ -43,6 +42,7 @@ class McpManager {
         self.mergeMCPTServers(event.data.servers);
       }
     });
+    this.startPolling();
   }
 
   mergeMCPTServers(updatedServers) {
@@ -78,6 +78,11 @@ class McpManager {
           toRemove.push(server);
         }
       }
+    }
+
+    if (toRemove.length === 0 && newServers.length === this.servers.length) {
+      //console.log('📡 No changes in server configuration');
+      return;
     }
 
     for (let i = 0; i < toRemove.length; i++) {
@@ -160,11 +165,8 @@ class McpManager {
 
   async addServer(serverConfig) {
     // Request permission for the server URL
-    const serverUrl = new URL(serverConfig.url);
-    console.log(`Requesting permission for ${serverUrl}`, serverConfig);
-    const pattern = `${serverUrl.protocol}//${serverUrl.hostname}${serverUrl.port ? ':' + serverUrl.port : ''}/*`;
     const client = new this.pageMcpClient(serverConfig.url);
-    await client.requestPermission(pattern);
+    await client.requestPermission();
 
     const existingServerIndex = this.servers.findIndex(server => server.name === serverConfig.name);
 
@@ -190,7 +192,7 @@ class McpManager {
     this.saveServers();
 
     // Refresh tool definitions
-    this.fetchToolsDefinitions();
+    await this.fetchToolsDefinitions();
 
     return this.servers;
   }
@@ -209,11 +211,39 @@ class McpManager {
     return this.servers;
   }
 
-  setServerStatus(serverId, enabled) {
+  async setServerStatus(serverId, enabled) {
     const server = this.servers.find(s => s.name === serverId);
     if (server) {
+      if (enabled) {
+        const client = new this.pageMcpClient(server.url);
+        const granted = await client.requestPermission();
+        if (!granted) {
+          console.error('Permission denied for ' + server.url);
+          throw new Error('Permission denied for ' + server.url);
+        }
+      }
       server.enabled = !!enabled;
       console.log(`📡 Set MCP server ${serverId} status to ${enabled ? 'enabled' : 'disabled'}`);
+      
+      // Save changes to storage
+      this.saveServers();
+      
+      this.fetchToolsDefinitions(); // Refresh tool definitions
+    }
+    return this.servers;
+  }
+
+  async setServerAutomation(serverId, automation) {
+    const server = this.servers.find(s => s.name === serverId);
+    if (server) {
+      const client = new this.pageMcpClient(server.url);
+      const granted = await client.requestPermission();
+      if (!granted) {
+        console.error('Permission denied for ' + server.url);
+        throw new Error('Permission denied for ' + server.url);
+      }
+      server.automation = automation;
+      console.log(`📡 Set MCP server ${serverId} automation to ${automation}`);
       
       // Save changes to storage
       this.saveServers();
@@ -235,7 +265,11 @@ class McpManager {
   async testServerConnection(server) {
     try {
       const client = new this.pageMcpClient(server.url);
-      
+      const granted = await client.requestPermission();
+      if (!granted) {
+        throw new Error('Permission denied for ' + server.url);
+      } 
+
       // Set API key if available
       if (server.apiKey) {
         client.setAuthToken(server.apiKey);
@@ -273,7 +307,7 @@ class McpManager {
       // Add MCP tools for each enabled server
       for (const server of enabledServers) {
         try {
-          console.log(`📡 Fetching tools for MCP server ${server.name} from ${server.url}`);
+          console.log(`**[MCP_MANAGER]** Fetching tools for MCP server ${server.name} from ${server.url}`);
           
           let toolDefinitions = [];
           
@@ -282,7 +316,7 @@ class McpManager {
             toolDefinitions = await this.fetchToolsFromServer(server);
             //console.log(`📡 Successfully fetched ${toolDefinitions.length} tools from ${server.name}`);
           } catch (error) {
-            console.warn(`📡 Error fetching tools from server ${server.name}:`, error);
+            console.warn(`**[MCP_MANAGER]** Error fetching tools from server ${server.name}:`, error);
           }
 
           server.cachedTools = [];
@@ -309,14 +343,16 @@ class McpManager {
 
           //console.log(`📡 Added ${toolDefinitions.length} tools for MCP server ${server.name}:`, tools);
         } catch (error) {
-          console.error(`📡 Error processing tools from MCP server ${server.name}:`, error);
+          console.error(`**[MCP_MANAGER]** Error processing tools from MCP server ${server.name}:`, error);
         }
       }
+      console.log(`**[MCP_MANAGER]** Updating ${tools.length} tools`, tools);
       this.toolManager.updateTools(tools);
-      // Update last fetch time
-      this.lastFetchTime = Date.now();
-    } catch (error) {
-      console.error('📡 Error fetching MCP tool definitions:', error);
+      if (this.ui && this.ui.renderServerList) {
+        this.ui.renderServerList();
+      }
+    } catch (error) { 
+      console.error('**[MCP_MANAGER]** Error fetching MCP tool definitions:', error);
     } finally {
       this.activeFetch = false;
     }
