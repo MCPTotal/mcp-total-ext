@@ -13,59 +13,35 @@ class ToolManager {
   static TOOL_PARAMS_PREFIX = 'PARAMS:';
   static SYSTEM_PROMPT_SEPARATOR = '===TOOLS-INSTRUCTIONS==='; // Add separator constant
   static SYSTEM_PROMPT_SEPARATOR_END = '===TOOLS-END===';
+  static SYSTEM_PROMPT_TOOL_DEFINITIONS = '***Available Tools:';
+  static TOOL_RESULT_TAG = 'Tool result for ';
   static TOOL_CALL_TAG = '<TOOL_CALL>';
   static TOOL_CALL_TAG_END = '</TOOL_CALL>';
-  static SYSTEM_PROMPT = `You have access to a set of tools which I (the user) can execute for you. You do **not** run them directly — instead, respond to me using a structured format, and I will return the result.
 
-Your task is to use these tools **proactively** and **autonomously** to help me complete my requests.
-
-## 🚨 Tool Call Format (STRICT)
-You must reply with tool usage in this exact format:
+  static SYSTEM_PROMPT = `I have access to a set of tools which I can execute for you. 
+The tools are listed below.
+To use these tools, you have to respond with a short explanation of why you need a tool, then with the tool call in this exact format:
 ${ToolManager.TOOL_CALL_TAG}{"tool": "prefix-tool_name", "parameters": {"param1": "value1"}}${ToolManager.TOOL_CALL_TAG_END}
+Then wait for my reply with the result of the tool call before continueing. 
 
+  Notes:
 - Format must be exact. including the opening and closing tags and JSON format.
-- No text, markdown, or explanation outside the tags.
 - Include the full tool name (e.g. "MCPT_Default-whatsapp_get_chats").
-
-❗ If the format is wrong, the tool will NOT run.
-
----
-
-## 🔁 One Tool Call at a Time
-
-Only include one tool call per message.  
-Stop your reply after it — do not include explanations, conclusions, or follow-up actions.  
-Wait for my reply before continuing with the next step.
-
-## 🧭 ID Handling
-- If a required \`id\` (like \`page_id\`, \`block_id\`) is missing, you may need to first use a tool to retrieve it.
-- If a result includes an ID, use another tool to resolve it to a human-readable value before replying.
-- Don’t guess or hardcode IDs, but try to resolve them yourself using the provided tools. Only ask if you can't.
-
----
-
-## ⚙️ Chaining & Completion (IMPORTANT!)
-- Use tools to complete the full task, one step at a time.
 - DON'T try to run the tool yourself, DON'T use python code for that. just respond with the tool call format and let me run it.
-- Often you’ll need to chain multiple tools (e.g., search → get ID → call → confirm) or just calling a single tool a few times.
-- Don’t simulate tool results.
 - Describe actions naturally, without referencing tool names.
+- Only use tools explicitly listed in the registry I provide.
+- REMEMBER: you can include up to a single tool call in any response you send, and use the exact tool call format I provided:
+  ${ToolManager.TOOL_CALL_TAG}{"tool": "prefix-tool_name", "parameters": {"param1": "value1"}}${ToolManager.TOOL_CALL_TAG_END}
 
----
-
-Respond using tool calls whenever helpful.  
-Always wait for my reply before continuing.
-Only use tools explicitly listed in the registry I provide.
-
-# 🔧 Available Tools:`;
+# ${ToolManager.SYSTEM_PROMPT_TOOL_DEFINITIONS}`;
 
   constructor(uiManager, platformAdapter) {
     this.uiManager = uiManager;
     this.platformAdapter = platformAdapter;
-    
+
     this.toolDefinitions = new Map(); // Map from class name to array of tools
     this.toolsDefinitionChanged = false;
-    
+
     // Track processed nodes to avoid duplication
     this.processedNodes = new WeakMap();
     this.lastMessageUrl = null; // Store URL where last message was sent
@@ -73,21 +49,21 @@ Only use tools explicitly listed in the registry I provide.
 
     // Setup network interceptors
     this.setupNetworkInterceptors();
-    
+
     // Setup tool call detection via MutationObserver
     this.setupDOMObserver();
   }
 
   _registerTool(toolDefinition) {
     const className = toolDefinition.className || 'default';
-    
+
     // Get or create the tools array for this class
     if (!this.toolDefinitions.has(className)) {
       this.toolDefinitions.set(className, []);
     }
-    
+
     const classTools = this.toolDefinitions.get(className);
-    
+
     // Check if tool already exists in this class
     const existingIndex = classTools.findIndex(tool => tool.name === toolDefinition.name);
 
@@ -99,38 +75,38 @@ Only use tools explicitly listed in the registry I provide.
       classTools.push(toolDefinition);
     }
   }
-  
+
   updateTools(tools) {
     // Calculate total count of existing tools
     const existingToolCount = Array.from(this.toolDefinitions.values())
       .reduce((sum, classTools) => sum + classTools.length, 0);
-    
+
     // Simple check to avoid updates if nothing changed
     if (tools.length === existingToolCount) {
       // Check if all tools match
       let allMatch = true;
-      
+
       for (const newTool of tools) {
         // Try to find a matching tool in current definitions
         const existingTool = this.getToolByName(newTool.name);
-        
+
         // If no matching tool or properties differ, tools have changed
-        if (!existingTool || 
-            existingTool.description !== newTool.description || 
-            existingTool.className !== newTool.className ||
-            JSON.stringify(existingTool.parameters || {}) !== 
-              JSON.stringify(newTool.parameters || {})) {
+        if (!existingTool ||
+          existingTool.description !== newTool.description ||
+          existingTool.className !== newTool.className ||
+          JSON.stringify(existingTool.parameters || {}) !==
+          JSON.stringify(newTool.parameters || {})) {
           allMatch = false;
           break;
         }
       }
-      
+
       if (allMatch) {
         //console.log('📡 Tools list unchanged, skipping update');
         return true;
       }
     }
-    
+
     // If different, update with the new tools
     console.log('📡 Updating tools with new list');
     this.toolDefinitions.clear();
@@ -151,7 +127,7 @@ Only use tools explicitly listed in the registry I provide.
     }
     return undefined;
   }
-  
+
   getToolsByPrefix(prefix) {
     return Array.from(this.toolDefinitions.values())
       .flatMap(classTools => classTools.filter(tool => tool.name.startsWith(prefix)))
@@ -178,15 +154,15 @@ Only use tools explicitly listed in the registry I provide.
   extractToolCalls(text) {
     const toolCalls = [];
     let startIndex = 0;
-    
+
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const start = text.indexOf(ToolManager.TOOL_CALL_TAG, startIndex);
       if (start === -1) break;
-      
+
       const end = text.indexOf(ToolManager.TOOL_CALL_TAG_END, start);
       if (end === -1) break;
-      
+
       const toolCallText = text.slice(start + ToolManager.TOOL_CALL_TAG.length, end);
       try {
         const toolCall = JSON.parse(toolCallText);
@@ -201,10 +177,10 @@ Only use tools explicitly listed in the registry I provide.
       } catch (e) {
         console.error('📡 Error parsing tool call:', e);
       }
-      
+
       startIndex = end + ToolManager.TOOL_CALL_TAG_END.length;
     }
-    
+
     if (toolCalls.length === 0) {
       console.warn('📡 !! No tool calls found in text:', text);
     }
@@ -213,8 +189,8 @@ Only use tools explicitly listed in the registry I provide.
 
   setupDOMObserver() {
     console.log('📡 Setting up MutationObserver for tool call detection');
-    
- 
+
+
     // Create a simple single observer that looks for new assistant messages
     this.observer = new MutationObserver((mutations) => {
       try {
@@ -223,7 +199,7 @@ Only use tools explicitly listed in the registry I provide.
 
         const assistantNodesToProcess = new Set();
         const userNodesToProcess = new Set();
-        
+
         for (const mutation of mutations) {
 
           // Find a user message ancestor
@@ -233,16 +209,16 @@ Only use tools explicitly listed in the registry I provide.
           }
           // find a user message child
           else if (mutation.target.querySelectorAll) {
-            const userMessages = 
+            const userMessages =
               mutation.target.querySelectorAll(this.platformAdapter.getSelectors().userMessage);
             if (userMessages.length > 0) {
-              userMessages.forEach(message => {              
+              userMessages.forEach(message => {
                 userNodesToProcess.add(message);
               });
             }
           }
-          
-          const assistantMessage = 
+
+          const assistantMessage =
             this.platformAdapter.findAssistantMessageAncestor(mutation.target);
           if (assistantMessage) {
             assistantNodesToProcess.add(assistantMessage);
@@ -252,7 +228,7 @@ Only use tools explicitly listed in the registry I provide.
               this.platformAdapter.getSelectors().assistantMessage
             );
             if (assistantMessages.length > 0) {
-              assistantMessages.forEach(message => {              
+              assistantMessages.forEach(message => {
                 assistantNodesToProcess.add(message);
               });
             }
@@ -264,7 +240,7 @@ Only use tools explicitly listed in the registry I provide.
         console.error('📡 Error processing nodes:', error);
       }
     });
-    
+
     // Function to safely start the observer
     const startObserver = () => {
       // Check if we have access to the document
@@ -273,40 +249,39 @@ Only use tools explicitly listed in the registry I provide.
         setTimeout(startObserver, 500);
         return;
       }
-      
+
       // Find the main container using platform adapter
       const targetNode = document.body || document.documentElement;
-      
+
       if (!targetNode) {
         console.log('📡 No valid target node found, will try again in 500ms');
         setTimeout(startObserver, 500);
         return;
       }
-      
+
       try {
         // Process any existing assistant messages first using platform adapter
         const existingMessages = this.platformAdapter.getAssistantMessages();
         console.log(`**[TOOL_MANAGER]** Found ${existingMessages.length} existing assistant messages`);
         existingMessages.forEach(message => this.processAssistantMessageForToolCalls(message));
-        
+
         const existingUserMessages = this.platformAdapter.getUserMessages();
         console.log(`**[TOOL_MANAGER]** Found ${existingUserMessages.length} existing user messages`);
         existingUserMessages.forEach(message => this.processUserMessage(message));
-        
+
         // Then start observing for new ones
         this.observer.observe(targetNode, {
           childList: true,
           subtree: true,
           characterData: true
         });
-        
-        console.log(`**[TOOL_MANAGER]** Observer installed on ${
-          targetNode.nodeName || 'unknown'} - watching for new messages`);
+
+        console.log(`**[TOOL_MANAGER]** Observer installed on ${targetNode.nodeName || 'unknown'} - watching for new messages`);
       } catch (error) {
         console.error('**[TOOL_MANAGER]** Error setting up observer:', error);
       }
     };
-    
+
     // Start the observer safely
     startObserver();
   }
@@ -314,12 +289,12 @@ Only use tools explicitly listed in the registry I provide.
   setupNetworkInterceptors() {
     const originalFetch = window.fetch;
     const self = this;
-    
-    window.fetch = async function() {
+
+    window.fetch = async function () {
       try {
         const url = arguments[0]?.url || arguments[0];
         const options = arguments[1] || {};
-      
+
         // Check if this is a message creation request to append the system prompt
         const isConversationRequest = self.platformAdapter
           .isConversationEndpoint(url, options.method);
@@ -346,47 +321,53 @@ Only use tools explicitly listed in the registry I provide.
 
   injectSystemPrompt(bodyData) {
     // Determine platform and check conditions
-    const isFirstMessage = this.platformAdapter.getUserMessages().length === 0;
-    
+    const assistantMessages = this.platformAdapter.getAssistantMessages();
+    const isFirstMessage = assistantMessages.length == 0 || assistantMessages[0].textContent.length === 0;
+
     let hasExplicitToken = false;
     let shouldInject = false;
-    
+
     // Claude: Check for MCPT token in prompt
     hasExplicitToken = this.platformAdapter.hasExplicitToken(bodyData);
     shouldInject = this.toolsDefinitionChanged || isFirstMessage || hasExplicitToken;
-    
+
     if (shouldInject) {
       // Generate system prompt with tools
-      const toolsDefinitions = this.getToolsDefinitions();      
+      const toolsDefinitions = this.getToolsDefinitions();
       // Get system prompt configuration from platform adapter
       const systemPrompt = [ToolManager.SYSTEM_PROMPT, ...toolsDefinitions].join('\n\n');
-      const systemPromptWithSeparator = ToolManager.SYSTEM_PROMPT_SEPARATOR + 
+      const systemPromptWithSeparator = ToolManager.SYSTEM_PROMPT_SEPARATOR +
         systemPrompt + ToolManager.SYSTEM_PROMPT_SEPARATOR_END;
-      console.log('📡 Injecting system prompt' + 
-        (isFirstMessage ? '(first in conversation)' : '(has MCPT token)'));
-      
+      console.log('******* Injecting system prompt', isFirstMessage, hasExplicitToken, this.toolsDefinitionChanged);
+
       bodyData = this.platformAdapter.appendSystemPrompt(
         bodyData, systemPromptWithSeparator, 'MCPT');
 
       // Set flag to prevent multiple injections
       this.toolsDefinitionChanged = false;
     }
+    else {
+      console.log('***** Skipping system prompt injection',
+        isFirstMessage, hasExplicitToken, this.toolsDefinitionChanged,
+        this.platformAdapter.getAssistantMessages().map(m => m.textContent),
+        this.platformAdapter.getUserMessages().map(m => m.textContent));
+    }
     return bodyData;
   }
-  
+
   getToolsDefinitions() {
     const sections = [];
-    
+
     // Sort class names for consistent output
     const sortedClassNames = Array.from(this.toolDefinitions.keys()).sort();
-    
+
     for (const className of sortedClassNames) {
       const classTools = this.toolDefinitions.get(className);
       if (classTools.length === 0) continue;
-      
+
       // Add class header
       sections.push(`## ${className.toUpperCase()} TOOLS`);
-      
+
       // Add tools for this class
       const toolDefinitions = classTools.map(tool => {
         let params = '';
@@ -399,24 +380,24 @@ Only use tools explicitly listed in the registry I provide.
         const definition = `${ToolManager.TOOL_PREFIX}${tool.name}\n${tool.description}${params}\n`;
         return definition;
       });
-      
+
       sections.push(...toolDefinitions);
       sections.push(''); // Add empty line between sections
     }
-    
+
     return sections;
   }
-  
+
   // Checks if a node has already been processed with the current content
   hasProcessedNode(node) {
     if (!node) return false;
-    
+
     // If content is provided, check if the node was processed with this exact content
     if (node.textContent !== undefined) {
       const processedContent = this.processedNodes.get(node);
       return processedContent === node.textContent;
     }
-    
+
     // Otherwise just check if the node was processed at all
     return this.processedNodes.has(node);
   }
@@ -431,13 +412,13 @@ Only use tools explicitly listed in the registry I provide.
   findDeepestNodeWith(node, separators) {
 
     const nodeText = node.nodeType === Node.TEXT_NODE ? node.textContent : node.innerText || '';
-    const nodeContainsPrompt = nodeText && 
+    const nodeContainsPrompt = nodeText &&
       separators.every(separator => nodeText.includes(separator));
-    
+
     if (nodeContainsPrompt) {
       // If this is a text node and contains the separator, return it
       if (node.nodeType === Node.TEXT_NODE) return node;
-      
+
       // If this is an element node, check its children
       if (node.nodeType === Node.ELEMENT_NODE && node.childNodes.length > 0) {
         for (const child of node.childNodes) {
@@ -447,7 +428,7 @@ Only use tools explicitly listed in the registry I provide.
       }
       return node;
     }
-    
+
     // If we didn't find anything, return null
     return null;
   }
@@ -462,7 +443,7 @@ Only use tools explicitly listed in the registry I provide.
 
     // Check if this node contains a tool call (only if no children were processed)
     const content = node.nodeType === Node.TEXT_NODE ? node.textContent : node.innerText || '';
-    const hasToolCall = content.includes(ToolManager.TOOL_CALL_TAG) && 
+    const hasToolCall = content.includes(ToolManager.TOOL_CALL_TAG) &&
       content.includes(ToolManager.TOOL_CALL_TAG_END);
     if (!hasToolCall) {
       return false;
@@ -476,12 +457,12 @@ Only use tools explicitly listed in the registry I provide.
         if (this.processAssistantMessageForToolCalls(childNode)) {
           processed = true;
         }
-      }      
+      }
       if (processed) {
         return true;
       }
     }
-    
+
     // Only process if this is the most specific element with the tool call
     // (not already processed)
     if (node.nodeType === Node.TEXT_NODE) {
@@ -502,36 +483,36 @@ Only use tools explicitly listed in the registry I provide.
         });
       }
     }
-    
+
     // Process the content for tool calls
     const toolCalls = this.extractToolCalls(content);
     if (toolCalls.length > 0) {
       if (ToolManager.DEBUG_TOOL_CALLS) {
         console.log('**[ASSISTANT_MESSAGES]** Processing tool call in specific node:', toolCalls);
       }
-      
+
       // Find the best container for UI injection
       const targetElement = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
 
-      const parentAssistantMessageIndex = 
+      const parentAssistantMessageIndex =
         this.platformAdapter.getParentAssistantMessageIndex(node);
       // Check if a message was already sent (avoid running old messages)
       console.log('**[ASSISTANT_MESSAGES]** Checking if can auto-run:', window.location.href, this.lastMessageUrl, this.lastAssitantMessageRan, parentAssistantMessageIndex);
       const canAutoRun = window.location.href === this.lastMessageUrl &&
-          this.lastAssitantMessageRan <  parentAssistantMessageIndex;
+        this.lastAssitantMessageRan < parentAssistantMessageIndex;
       // Inject UI
       const self = this;
       requestAnimationFrame(() => {
         if (ToolManager.DEBUG_TOOL_CALLS) {
-          console.log('**[ASSISTANT_MESSAGES]** Injecting tool result button for tool calls:', 
+          console.log('**[ASSISTANT_MESSAGES]** Injecting tool result button for tool calls:',
             toolCalls, targetElement);
         }
         toolCalls.forEach(toolCall => {
           const ran = this.uiManager.injectToolResultButton(
-            toolCall, 
-            toolCall.execute, 
-            toolCall.toolCallText, 
-            targetElement, 
+            toolCall,
+            toolCall.execute,
+            toolCall.toolCallText,
+            targetElement,
             canAutoRun
           );
           if (ran) {
@@ -542,38 +523,38 @@ Only use tools explicitly listed in the registry I provide.
           }
         });
       });
-      
+
       return true; // Indicate this branch was processed
     }
-    
+
     return false; // Return whether processing occurred
   }
 
   processUserMessageForResult(userMessageNode) {
     //console.log('** [USER_MESSAGES] ** Processing user message for result:', userMessageNode, userMessageNode.textContent);
-    const TOOL_RESULT_TAG = 'Tool result for ';
-    const deepestNode = this.findDeepestNodeWith(userMessageNode, [TOOL_RESULT_TAG]);
+    const deepestNode = this.findDeepestNodeWith(userMessageNode, [ToolManager.TOOL_RESULT_TAG]);
     if (deepestNode) {
       const originalText = deepestNode.textContent;
       deepestNode.textContent = '';
-      const parentElement = deepestNode.nodeType === Node.TEXT_NODE ? 
+      const parentElement = deepestNode.nodeType === Node.TEXT_NODE ?
         deepestNode.parentElement : deepestNode;
       console.log('** [USER_MESSAGES] ** Found tool result in deepest node:', deepestNode, deepestNode.textContent);
       this.uiManager.createSystemPromptToggle(
         'tool result',
-        originalText, 
-        parentElement, 
+        originalText,
+        parentElement,
         deepestNode
       );
-
+      return true;
     }
+    return false;
   }
 
   processUserMessageForSystemPrompt(userMessageNode) {
-    const deepestNode = this.findDeepestNodeWith(userMessageNode, 
+    const deepestNode = this.findDeepestNodeWith(userMessageNode,
       [ToolManager.SYSTEM_PROMPT_SEPARATOR, ToolManager.SYSTEM_PROMPT_SEPARATOR_END]);
     if (!deepestNode) {
-      return;
+      return false;
     }
 
     console.log('📡 Found system prompt in deep node:', deepestNode);
@@ -582,8 +563,8 @@ Only use tools explicitly listed in the registry I provide.
     const parts = deepestNode.textContent.split(ToolManager.SYSTEM_PROMPT_SEPARATOR);
     if (parts.length >= 2) {
       const userMessage = parts[0].trim();
-      const toolDefinitions = parts[1].split('Available Tools:')[1].trim();
-      
+      const toolDefinitions = parts[1].split(ToolManager.SYSTEM_PROMPT_TOOL_DEFINITIONS)[1].trim();
+
       // Update just this text node to remove the system prompt
       if (ToolManager.DEBUG_USER_MESSAGES) {
         console.log('**[USER_MESSAGES]** Removing system prompt from user message:', deepestNode, userMessage, deepestNode.textContent);
@@ -594,14 +575,14 @@ Only use tools explicitly listed in the registry I provide.
       } else {
         const separator = ToolManager.SYSTEM_PROMPT_SEPARATOR;
         let found = false;
-        
+
         const toRemove = [];
         for (let i = 0; i < deepestNode.childNodes.length; i++) {
           const child = deepestNode.childNodes[i];
           if (found) {
             toRemove.push(child);
           }
-        
+
           if (!found && child.textContent?.includes(separator)) {
             found = true;
           }
@@ -619,19 +600,21 @@ Only use tools explicitly listed in the registry I provide.
       if (ToolManager.DEBUG_USER_MESSAGES) {
         console.log('**[USER_MESSAGES]** Post removal user message:', deepestNode, deepestNode.textContent);
       }
-      
+
       // Use UIManager to create theme-aware system prompt toggle
       this.uiManager.createSystemPromptToggle(
         'tool definitions',
-        toolDefinitions, 
-        parentElement, 
+        toolDefinitions,
+        parentElement,
         deepestNode
       );
-      
+
       if (ToolManager.DEBUG_USER_MESSAGES) {
-        console.log('**[USER_MESSAGES]** Hidden system prompt in user message:', userMessage.substring(0, 50));      
+        console.log('**[USER_MESSAGES]** Hidden system prompt in user message:', userMessage.substring(0, 50));
       }
+      return true;
     }
+    return false;
   }
 
   // Add a new method to hide system prompts in user messages
@@ -641,10 +624,10 @@ Only use tools explicitly listed in the registry I provide.
     }
     if (!userMessageNode || this.hasProcessedNode(userMessageNode)) return;
     this.markNodeAsProcessed(userMessageNode);
-    
+
     // Check if this message has already been processed
     const hasSystemPrompt = userMessageNode.querySelector('.tool-definitions-toggle');
-    if (hasSystemPrompt) return;   
+    if (hasSystemPrompt) return;
 
     this.processUserMessageForSystemPrompt(userMessageNode);
     this.processUserMessageForResult(userMessageNode);
@@ -656,9 +639,9 @@ Only use tools explicitly listed in the registry I provide.
     // Get all tools from this server (tools are prefixed with server ID)
     const serverPrefix = `${serverId}`;
     const affectedTools = this.getToolsByPrefix(serverPrefix);
- 
+
     console.log(`📡 Applying automation "${automation}" to ${affectedTools.length} tools from server "${serverId}"`);
- 
+
     // Apply automation preference to each tool
     affectedTools.forEach(toolName => {
       this.uiManager.setToolPreference(toolName, { mode: automation });
@@ -675,4 +658,4 @@ if (typeof exposeModule === 'function') {
     module.exports = ToolManager;
   }
 }
-/* eslint-enable no-undef */ 
+/* eslint-enable no-undef */

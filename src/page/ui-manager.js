@@ -2,6 +2,7 @@
 // UIManager Class
 // ==============================
 class UIManager {
+  static TOOL_RESULT_TAG = 'Tool result for ';
   constructor(themeManager, platformAdapter, mcpUI, extensionUrl) {
     this.platformAdapter = platformAdapter;
     this.mcpUI = mcpUI;
@@ -879,7 +880,7 @@ class UIManager {
 
       // Format the result message with params included
       const paramsStr = this.formatParameters(toolCall.parameters);
-      const resultMessage = `Tool result for ${toolCall.tool}${paramsStr}:\n${result}`;
+      const resultMessage = `${UIManager.TOOL_RESULT_TAG}${toolCall.tool}${paramsStr}:\n${result}`;
 
       // Enter the result into the message box and preserve newlines
       inputElement.focus();

@@ -4,14 +4,14 @@ console.log('🔍 Initializing monitor script');
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'MCPT_SERVERS_UPDATED') {
     console.log('🔍 Received MCP servers update from background:', message.servers);
-    
+
     // Forward the server list to the page monitor script
     window.postMessage({
       type: 'MCPT_SERVERS_UPDATED',
       servers: message.servers,
       source: message.source
     }, '*');
-    
+
     sendResponse({ received: true });
   }
 });
@@ -100,7 +100,7 @@ function initMcpTotal() {
     // Send extension URL when requested by debug monitor
     if (event.data && event.data.type === 'MCPT_UPDATE_LISTS') {
       console.log('🔍 MCPT_UPDATE_LISTS', event.data);
-      
+
       // Send the server configuration to background script for storage and distribution
       if (event.data.data && Array.isArray(event.data.data)) {
         chrome.runtime.sendMessage({
