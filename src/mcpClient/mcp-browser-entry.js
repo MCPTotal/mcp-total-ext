@@ -29,13 +29,13 @@ class BrowserMcpClient {
     }
 
     try {
-      
+
       // Try StreamableHTTP first
       try {
         // Create client instance
         this.client = new Client({
           name: 'browser-mcp-client',
-          version: '1.3.0'
+          version: '1.3.1'
         });
         // Create base URL object
         const url = new URL(this.serverUrl);
@@ -56,27 +56,27 @@ class BrowserMcpClient {
         await this.client.connect(this.transport);
         this.connected = true;
         this.transportType = 'streamableHttp';
-        
+
         console.log('Connected to MCP server using StreamableHTTP transport:', this.serverUrl);
-        
+
         return true;
       } catch (streamableError) {
         // If StreamableHTTP fails, fall back to SSE
         console.log('StreamableHTTP connection failed, falling back to SSE transport:', streamableError);
-        
+
         // Create new client instance
         this.client = new Client({
           name: 'browser-mcp-client',
-          version: '1.3.0'
+          version: '1.3.1'
         });
-        
+
         // For SSE transport, we MUST use URL parameters for authentication
         // This is because browser's native EventSource API doesn't support custom headers
         const sseUrl = new URL(this.serverUrl);
         if (this.authToken) {
           sseUrl.searchParams.set('key', `${this.authToken}`);
         }
-        
+
         // Create SSE transport
         this.transport = new SSEClientTransport(sseUrl);
 
@@ -84,9 +84,9 @@ class BrowserMcpClient {
         await this.client.connect(this.transport);
         this.connected = true;
         this.transportType = 'sse';
-        
+
         console.log('Connected to MCP server using SSE transport:', this.serverUrl);
-        
+
         return true;
       }
     } catch (error) {
@@ -151,16 +151,16 @@ class BrowserMcpClient {
     while (hasMore && pageCount < maxPages) {
       try {
         const requestParams = {};
-        
+
         // Add cursor for pagination if we have one
         if (cursor) {
           requestParams.cursor = cursor;
         }
 
         console.log(`📡 Fetching ${resourceName} page ${pageCount + 1}${cursor ? ` (cursor: ${cursor.substring(0, 20)}...)` : ''}`);
-        
+
         const response = await clientMethod.call(this.client, requestParams);
-        
+
         if (!response) {
           console.warn(`📡 No response received from ${clientMethod.name}`);
           break;
@@ -168,7 +168,7 @@ class BrowserMcpClient {
 
         const items = response[responseProperty] || [];
         allItems.push(...items);
-        
+
         console.log(`📡 Page ${pageCount + 1}: Found ${items.length} ${resourceName} (total: ${allItems.length})`);
 
         // Check pagination info
@@ -183,12 +183,12 @@ class BrowserMcpClient {
 
       } catch (error) {
         console.error(`📡 Error fetching ${resourceName} page ${pageCount + 1}:`, error);
-        
+
         // If it's the first page, re-throw the error
         if (pageCount === 0) {
           throw error;
         }
-        
+
         // For subsequent pages, log the error and stop pagination
         console.warn(`📡 Stopping pagination due to error on page ${pageCount + 1}`);
         break;
@@ -223,9 +223,9 @@ class BrowserMcpClient {
         name: toolName,
         arguments: parameters
       });
-      
+
       console.log(`Tool ${toolName} result:`, response);
-      
+
       // Extract text content from response if available
       let result = response;
       if (response && response.content && Array.isArray(response.content)) {
@@ -236,20 +236,20 @@ class BrowserMcpClient {
           result = textContent.map(item => item.text).join('\n');
         }
       }
-      
+
       return result;
     } catch (error) {
       console.error(`Error calling tool ${toolName}:`, error);
       throw error;
     }
   }
-  
+
   // Get a resource
   async getResource(uri) {
     if (!this.connected || !this.client) {
       throw new Error('Not connected to MCP server');
     }
-    
+
     try {
       console.log(`Reading resource from ${uri}`);
       const response = await this.client.readResource({ uri });
@@ -260,13 +260,13 @@ class BrowserMcpClient {
       throw error;
     }
   }
-  
+
   // List available resources
   async listResources() {
     if (!this.connected || !this.client) {
       throw new Error('Not connected to MCP server');
     }
-    
+
     try {
       const allResources = await this._getAllResources();
       console.log('Available resources:', allResources);
@@ -284,13 +284,13 @@ class BrowserMcpClient {
   async _getAllResources() {
     return this._paginateRequest(this.client.listResources, 'resources', 'resources');
   }
-  
+
   // Get a prompt
   async getPrompt(name, args) {
     if (!this.connected || !this.client) {
       throw new Error('Not connected to MCP server');
     }
-    
+
     try {
       console.log(`Getting prompt ${name} with arguments:`, args);
       const response = await this.client.getPrompt({
@@ -304,13 +304,13 @@ class BrowserMcpClient {
       throw error;
     }
   }
-  
+
   // List available prompts
   async listPrompts() {
     if (!this.connected || !this.client) {
       throw new Error('Not connected to MCP server');
     }
-    
+
     try {
       const allPrompts = await this._getAllPrompts();
       console.log('Available prompts:', allPrompts);
@@ -328,7 +328,7 @@ class BrowserMcpClient {
   async _getAllPrompts() {
     return this._paginateRequest(this.client.listPrompts, 'prompts', 'prompts');
   }
-  
+
   // Get the current transport type
   getTransportType() {
     return this.transportType;
@@ -341,6 +341,6 @@ const MCPClient = {
   OriginalClient: Client,
   SSEClientTransport,
   StreamableHTTPClientTransport
-}; 
+};
 
 export default MCPClient;

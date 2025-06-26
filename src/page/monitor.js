@@ -28,7 +28,7 @@
       init();
     }
   });
-  
+
   // Send message to request extension URL
   window.postMessage({ type: 'REQUEST_EXTENSION_URL' }, '*');
 
@@ -37,7 +37,7 @@
     // In debug mode, we'll dynamically import modules
     if (!isProduction) {
       console.log('📡 Running in debug mode - will load modules dynamically');
-      
+
       window.exposeModule = function (moduleExport) {
         // For CommonJS environments (webpack bundling)
         if (typeof module !== 'undefined' && module.exports) {
@@ -94,7 +94,7 @@
 
         // Extract utility functions
         const { sendContentMessage } = utils;
-        
+
         // Initialize and configure components
         await initializeComponents({
           UIManager,
@@ -137,7 +137,7 @@
         const McpManager = require('./mcp-manager');
         const UIManager = require('./ui-manager');
         const McpUI = require('./mcp-ui');
-        
+
         // Initialize and configure components
         await initializeComponents({
           UIManager,
@@ -196,6 +196,6 @@
     });
 
     // Send startup message
-    sendContentMessage('MONITOR_STARTED', { version: '1.3.0' });
+    sendContentMessage('MONITOR_STARTED', { version: '1.3.1' });
   }
 })(); 
