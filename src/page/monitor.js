@@ -196,6 +196,6 @@
     });
 
     // Send startup message
-    sendContentMessage('MONITOR_STARTED', { version: '1.3.1' });
+    sendContentMessage('MONITOR_STARTED', { version: '1.3.2' });
   }
 })(); 

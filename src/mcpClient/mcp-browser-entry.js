@@ -35,7 +35,7 @@ class BrowserMcpClient {
         // Create client instance
         this.client = new Client({
           name: 'browser-mcp-client',
-          version: '1.3.1'
+          version: '1.3.2'
         });
         // Create base URL object
         const url = new URL(this.serverUrl);
@@ -67,7 +67,7 @@ class BrowserMcpClient {
         // Create new client instance
         this.client = new Client({
           name: 'browser-mcp-client',
-          version: '1.3.1'
+          version: '1.3.2'
         });
 
         // For SSE transport, we MUST use URL parameters for authentication

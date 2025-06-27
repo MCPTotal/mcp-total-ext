@@ -18,11 +18,11 @@ class ToolManager {
   static TOOL_CALL_TAG = '<TOOL_CALL>';
   static TOOL_CALL_TAG_END = '</TOOL_CALL>';
 
-  static SYSTEM_PROMPT = `I have access to a set of tools which you can use to perform actions in this conversation.
+  static SYSTEM_PROMPT = `I have access to a set of tools which I can run for you to perform actions in this conversation.
 The tools are listed below. Take then into account on any prompt you get, and if applicable, plan a set of tool calls to perform the task.
 Start by responding with the planned set of tool calls and explanation of what you're going to do, then repond with the first tool call in this exact format:
 ${ToolManager.TOOL_CALL_TAG}{"tool": "prefix-tool_name", "parameters": {"param1": "value1"}}${ToolManager.TOOL_CALL_TAG_END}
-Then immediately stop responding and wait for the tool result before continuing and potentially issuing another tool call.
+Then immediately stop responding and wait for me to run the tool and reply with the result before continuing and potentially issuing another tool call.
 
 ** Remember **:
 - Start with a plan of a series of tool call, immediately followed with the first tool call, then wait for the result before continuing with the next tool call.
@@ -43,12 +43,16 @@ then use it to call MCPT_personal-whatsapp_list_messages with filter on that id 
 Let's start with the first tool call:
 ${ToolManager.TOOL_CALL_TAG}{"tool": "MCPT_personal-whatsapp_list_chats", "parameters": {"filter": "Family", "include_last_message": true, "limit": 10}}${ToolManager.TOOL_CALL_TAG_END}
 
+(STOP AND WAIT FOR MY REPLY)
+
 User: 
 Retuls for MCPT_personal-whatsapp_list_chats: ...
 
 Assistant: 
 Now I'll use the id to call MCPT_personal-whatsapp_list_messages with filter on that id to get the last 10 messages.
 ${ToolManager.TOOL_CALL_TAG}{"tool": "MCPT_personal-whatsapp_list_messages", "parameters": {"chat_id": "1234567890", "filter": "Family", "include_last_message": true, "limit": 10}}${ToolManager.TOOL_CALL_TAG_END}
+
+(STOP AND WAIT FOR MY REPLY)
 
 User: 
 Results for MCPT_personal-whatsapp_list_messages: ...
@@ -58,18 +62,18 @@ Here's a summary of the last 10 messages in the Family chat group:
 ...
 
 * Example - Incorrect *
-- Issuing multiple tool calls in one response.
+- Providing a second tool call without waitig for my reply
 - Repeating a tool call for identical user messages without change.
 - Replying with a wrong tool call format, e.g. missing opening or closing tags, or missing JSON format within it.
 
 ${ToolManager.SYSTEM_PROMPT_TOOL_DEFINITIONS}`;
 
   static SYSTEM_PROMPT_NOTE = `Reminder:
-1. You MUST use the exact full tool call format, including the opening and closing tags and the JSON format within it.
+1. You MUST use the exact complete tool call format, including the opening and closing tags and the JSON format within it.
 2. You can only use one tool call at a time
 3. After placing each tool call, you must pause entirely and wait for my reply with the result before continuing.
 4. The tools listed below are guaranteed to be available through this entire conversation. You can use them at any time.
-5. You must include the full tool name exactly as listed (e.g., "MCPT_personal-whatsapp_list_chats").
+5. You must include the complete tool name exactly as listed (e.g., "MCPT_personal-whatsapp_list_chats").
 6. Do not use any identifiers from other conversations, only use the ones provided here.
 These rules are critical and must be followed at all times. Failure to comply will result in a critical instruction violation
 
