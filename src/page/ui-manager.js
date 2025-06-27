@@ -485,7 +485,7 @@ class UIManager {
       }
       toolButton.disabled = false;
 
-      return { currentResult, hasBeenExecuted };
+      return { currentResult: resultText, hasBeenExecuted };
     } catch (e) {
       console.error('📡 Error executing tool:', e);
       resultElement.textContent = `Error: ${e.message}`;

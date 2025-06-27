@@ -228,14 +228,14 @@ class BrowserMcpClient {
 
       // Extract text content from response if available
       let result = response;
-      if (response && response.content && Array.isArray(response.content)) {
+      /*if (response && response.content && Array.isArray(response.content)) {
         const textContent = response.content.filter(item => item.type === 'text');
         if (textContent.length === 1) {
           result = textContent[0].text;
         } else if (textContent.length > 1) {
           result = textContent.map(item => item.text).join('\n');
         }
-      }
+      }*/
 
       return result;
     } catch (error) {
