@@ -13,16 +13,16 @@ class McpManager {
     this.pollingInterval = 60000; // How often to refresh tool definitions (in ms)
     this.activeFetch = false;
     this.STORAGE_KEY = 'MCPT_servers';
-    
+
     // Initialize the UI manager
     this.ui = mcpUI;
     this.uiManager = uiManager;
-    
+
     // Setup dependencies
     if (this.ui) {
       this.ui.setMcpManager(this);
       this.ui.setToolManager(this.toolManager);
-      
+
       // Add keyboard shortcut for quick access to server config
       this.ui.setupKeyboardShortcut();
     } else {
@@ -31,14 +31,14 @@ class McpManager {
 
     this.builtInTools = this.GetBuiltInTools();
     this.pageMcpClient = pageMcpClient;
-    
+
     // Load saved servers from storage
     this.loadServers();
     const self = this;
 
     window.addEventListener('message', function (event) {
       if (event.data && event.data.type === 'MCPT_SERVERS_UPDATED') {
-        //console.log('🔍 Received MCP servers update:', event.data.servers);
+        console.log('🔍 Received MCP servers update:', event.data.servers);
         self.mergeMCPTServers(event.data.servers);
       }
     });
@@ -63,10 +63,10 @@ class McpManager {
           url: updatedServers[i].endpoint + '/mcp',
           apiKey: updatedServers[i].key,
           enabled: true,
-          automation: 'manual', // Default automation mode for new MCPT servers
+          automation: 'autosubmit', // Default automation mode for new MCPT servers
           readonly: true // MCPT servers are read-only
         });
-      }      
+      }
     }
 
     const toRemove = [];
@@ -80,17 +80,12 @@ class McpManager {
       }
     }
 
-    if (toRemove.length === 0 && newServers.length === this.servers.length) {
-      //console.log('📡 No changes in server configuration');
-      return;
-    }
-
     for (let i = 0; i < toRemove.length; i++) {
       newServers.splice(newServers.indexOf(toRemove[i]), 1);
     }
     // Check if there are any changes between newServers and this.servers
-    const hasChanges = newServers.length !== this.servers.length || 
-      newServers.some((newServer, index) => 
+    const hasChanges = newServers.length !== this.servers.length ||
+      newServers.some((newServer, index) =>
         JSON.stringify(newServer) !== JSON.stringify(this.servers[index])
       );
 
@@ -149,7 +144,7 @@ class McpManager {
       name: 'random-get_random_number',
       description: 'Get a random number between 0 and 1. This is the best way to get a random numbers.',
       className: 'Random',
-      parameters: {'min': {'type': 'number', 'description': 'The minimum value'}, 'max': {'type': 'number', 'description': 'The maximum value'}},
+      parameters: { 'min': { 'type': 'number', 'description': 'The minimum value' }, 'max': { 'type': 'number', 'description': 'The maximum value' } },
       mode: 'autosend',
       callback: (params) => {
         const min = parseInt(params.min) || 0;
@@ -181,7 +176,7 @@ class McpManager {
       // Add new server config with defaults (manual servers are not readonly)
       this.servers.push({
         enabled: true,
-        automation: 'manual', // Default automation mode
+        automation: 'autosubmit', // Default automation mode
         readonly: false, // Manual servers are editable
         ...serverConfig,
       });
@@ -202,10 +197,10 @@ class McpManager {
     if (index >= 0) {
       this.servers.splice(index, 1);
       console.log(`📡 Removed MCP server ${serverId}`);
-      
+
       // Save changes to storage
       this.saveServers();
-      
+
       this.fetchToolsDefinitions(); // Refresh tool definitions
     }
     return this.servers;
@@ -224,10 +219,10 @@ class McpManager {
       }
       server.enabled = !!enabled;
       console.log(`📡 Set MCP server ${serverId} status to ${enabled ? 'enabled' : 'disabled'}`);
-      
+
       // Save changes to storage
       this.saveServers();
-      
+
       this.fetchToolsDefinitions(); // Refresh tool definitions
     }
     return this.servers;
@@ -244,10 +239,10 @@ class McpManager {
       }
       server.automation = automation;
       console.log(`📡 Set MCP server ${serverId} automation to ${automation}`);
-      
+
       // Save changes to storage
       this.saveServers();
-      
+
       this.fetchToolsDefinitions(); // Refresh tool definitions
     }
     return this.servers;
@@ -268,13 +263,13 @@ class McpManager {
       const granted = await client.requestPermission();
       if (!granted) {
         throw new Error('Permission denied for ' + server.url);
-      } 
+      }
 
       // Set API key if available
       if (server.apiKey) {
         client.setAuthToken(server.apiKey);
       }
-      
+
       await client.connect();
       const tools = await client.listTools();
       console.log('🔍 Available tools:', tools);
@@ -308,9 +303,9 @@ class McpManager {
       for (const server of enabledServers) {
         try {
           console.log(`**[MCP_MANAGER]** Fetching tools for MCP server ${server.name} from ${server.url}`);
-          
+
           let toolDefinitions = [];
-          
+
           // Try to fetch real tool definitions from the server
           try {
             toolDefinitions = await this.fetchToolsFromServer(server);
@@ -351,58 +346,30 @@ class McpManager {
       if (this.ui && this.ui.renderServerList) {
         this.ui.renderServerList();
       }
-    } catch (error) { 
+    } catch (error) {
       console.error('**[MCP_MANAGER]** Error fetching MCP tool definitions:', error);
     } finally {
       this.activeFetch = false;
     }
   }
-  
-  /**
-   * Converts tool input schema properties to the expected parameter format
-   * @param {Object} inputSchema - The input schema from the tool definition
-   * @returns {Object} - Formatted parameters object
-   */
-  convertToolParameters(inputSchema) {
-    if (!inputSchema || !inputSchema.properties) {
-      return {};
-    }
-    
-    const result = {};
-    
-    // Process each property in the input schema
-    Object.entries(inputSchema.properties).forEach(([paramName, paramSchema]) => {
-      result[paramName] = {
-        type: paramSchema.type || 'string',
-        description: (paramSchema.description || paramSchema.title || paramName).replace(/[\n\r]+/g, ' ').trim(),
-      };
-      
-      // Add enum values if present
-      if (paramSchema.enum) {
-        result[paramName].enum = paramSchema.enum;
-      }
-    });
-    
-    return result;
-  }
 
   async fetchToolsFromServer(server) {
     try {
       const client = new this.pageMcpClient(server.url);
-      
+
       // Set API key if available
       if (server.apiKey) {
         client.setAuthToken(server.apiKey);
       }
-      
+
       await client.connect();
       const tools = await client.listTools();
       await client.disconnect();
-      
+
       return tools.map(tool => ({
         name: tool.name,
-        description: (tool.description || '').replace(/[\n\r]+/g, ' ').trim(),
-        parameters: this.convertToolParameters(tool.inputSchema)
+        description: tool.description,
+        parameters: tool.inputSchema
       }));
     } catch (error) {
       console.warn(`📡 Error fetching tools from ${server.url}:`, error);
@@ -446,7 +413,7 @@ class McpManager {
       return `Error executing tool on server ${serverId}: ${error.message}`;
     }
   }
-  
+
   /**
    * Execute a tool on a real MCP server
    * @param {Object} server - Server configuration
@@ -457,17 +424,17 @@ class McpManager {
   async executeToolOnServer(server, toolName, parameters) {
     try {
       const client = new this.pageMcpClient(server.url);
-      
+
       // Set API key if available
       if (server.apiKey) {
         client.setAuthToken(server.apiKey);
       }
-      
+
       await client.connect();
       const result = await client.callTool(toolName, parameters);
       await client.disconnect();
       return result;
-      
+
     } catch (error) {
       console.error(`📡 Error executing tool on ${server.url}:`, error);
       //throw error;
@@ -484,4 +451,4 @@ if (typeof exposeModule === 'function') {
     module.exports = McpManager;
   }
 }
-/* eslint-enable no-undef */ 
+/* eslint-enable no-undef */

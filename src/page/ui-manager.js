@@ -3,6 +3,7 @@
 // ==============================
 class UIManager {
   static TOOL_RESULT_TAG = 'Tool result for ';
+  static MCPT_TOOLS_PREFIX = 'MCPT_';
   constructor(themeManager, platformAdapter, mcpUI, extensionUrl) {
     this.platformAdapter = platformAdapter;
     this.mcpUI = mcpUI;
@@ -11,12 +12,12 @@ class UIManager {
     this.toolPreferences = {};
     // Load preferences from localStorage on initialization
     this.loadToolPreferences();
-    
+
     // Initialize theme manager - first check if it's available globally
     this.themeManager = themeManager;
     this.colors = this.themeManager.getColors();
     console.log('🎨 UIManager theme:', this.themeManager.getCurrentTheme());
-      
+
     // Register for theme changes to update our colors
     this._themeUnsubscribe = this.themeManager.onThemeChange((theme, colors) => {
       console.log(`🎨 UIManager received theme change: ${theme}`);
@@ -35,27 +36,27 @@ class UIManager {
   _onThemeChanged() {
     // Refresh colors from theme manager first
     this.colors = this.themeManager?.getColors() || this._getFallbackColors();
-    
+
     // Re-apply styles to any existing tool result elements
     const toolResultElements = document.querySelectorAll('.tool-result-element');
     toolResultElements.forEach(element => {
       this._updateElementTheme(element);
     });
-    
+
     // Re-apply styles to any existing settings menus
     const settingsMenus = document.querySelectorAll('.tool-settings-menu');
     settingsMenus.forEach(menu => {
       this._updateSettingsMenuTheme(menu);
     });
-    
+
     // Re-apply styles to any existing system prompt toggles
     this._updateSystemPromptTheme();
-    
+
     // Update MCP settings button icon
     const mcpButton = document.getElementById('mcp-settings-button');
     if (mcpButton && mcpButton._mcpIcon) {
       this._updateButtonIcon(mcpButton._mcpIcon);
-      
+
       // Update button background color
       mcpButton.style.backgroundColor = this.colors.primary;
     }
@@ -72,10 +73,10 @@ class UIManager {
         element.style.backgroundColor = `${this.colors.backgroundInput} !important`;
         element.style.borderColor = `${this.colors.resultBorder} !important`;
         element.style.color = `${this.colors.text} !important`;
-        
+
         // Force text color using specific attribute to override any platform styles
-        element.setAttribute('style', 
-          element.getAttribute('style') + 
+        element.setAttribute('style',
+          element.getAttribute('style') +
           `; color: ${this.colors.text} !important; text-color: ${this.colors.text} !important;`
         );
       } else {
@@ -83,10 +84,10 @@ class UIManager {
         element.style.backgroundColor = `${this.colors.resultBackground} !important`;
         element.style.borderColor = `${this.colors.resultBorder} !important`;
         element.style.color = `${this.colors.resultText} !important`;
-        
+
         // Force text color using specific attribute to override any platform styles
-        element.setAttribute('style', 
-          element.getAttribute('style') + 
+        element.setAttribute('style',
+          element.getAttribute('style') +
           `; color: ${this.colors.resultText} !important; text-color: ${this.colors.resultText} !important;`
         );
       }
@@ -99,7 +100,7 @@ class UIManager {
   _updateSettingsMenuTheme(menu) {
     menu.style.backgroundColor = this.colors.backgroundModal;
     menu.style.borderColor = this.colors.border;
-    
+
     // Update child buttons
     const buttons = menu.querySelectorAll('button');
     buttons.forEach(button => {
@@ -117,17 +118,17 @@ class UIManager {
     const toggleButtons = document.querySelectorAll('.tool-definitions-toggle');
     toggleButtons.forEach(button => {
       button.style.color = `${this.colors.textSecondary} !important`;
-      
+
       // Update hover events with new colors
       button.onmouseover = () => {
         button.style.color = this.colors.text;
       };
-      
+
       button.onmouseout = () => {
         button.style.color = this.colors.textSecondary;
       };
     });
-    
+
     // Update tool definitions containers
     const toolDefContainers = document.querySelectorAll('.tool-definitions-container');
     toolDefContainers.forEach(container => {
@@ -135,10 +136,10 @@ class UIManager {
       container.style.color = `${this.colors.text} !important`;
       container.style.borderColor = `${this.colors.border} !important`;
     });
-    
+
     console.log('🎨 Updated system prompt theme for', toggleButtons.length, 'toggles and', toolDefContainers.length, 'containers');
   }
-  
+
   /**
    * Cleanup method to unsubscribe from theme changes
    */
@@ -285,7 +286,7 @@ class UIManager {
 
     // Use smaller icon size for a more compact look
     const iconSize = '12';
-    
+
     // Create the three mode buttons with smaller icons
     const manualButton = this.createModeButton(
       'Manual',
@@ -304,8 +305,8 @@ class UIManager {
     );
 
     const autoSendButton = this.createModeButton(
-      'Auto-run and send',
-      'autosend',
+      'Auto-run and submit to chat',
+      'autosubmit',
       currentMode,
       `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path></svg>`,
       toolCall,
@@ -356,7 +357,7 @@ class UIManager {
 
     // Add hover effect
     button.addEventListener('mouseover', () => {
-      button.style.backgroundColor = isSelected ? 
+      button.style.backgroundColor = isSelected ?
         this.colors.highlightBg : this.colors.backgroundHover;
     });
 
@@ -465,8 +466,8 @@ class UIManager {
 
       // Check if we should auto-send based on tool preferences
       const currentToolPrefs = this.getToolPreference(toolCall.tool);
-      if (currentToolPrefs.mode === 'autosend') {
-        console.log(`📡 Auto-sending result for tool ${toolCall.tool}`);
+      if (currentToolPrefs.mode === 'autosubmit') {
+        console.log(`📡 Auto-submitting result for tool ${toolCall.tool}`);
         // Small delay to let user see the result before sending
         setTimeout(() => {
           if (!sendButton.disabled) {
@@ -545,13 +546,13 @@ class UIManager {
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
       transition: border-color 0.2s;
     `;
-    
+
     // Force text color using specific attribute to override any platform styles
-    resultElement.setAttribute('style', 
-      resultElement.getAttribute('style') + 
+    resultElement.setAttribute('style',
+      resultElement.getAttribute('style') +
       `; color: ${this.colors.resultText} !important; text-color: ${this.colors.resultText} !important;`
     );
-    
+
     console.log('🎨 Tool result styling:', {
       theme: this.themeManager?.getCurrentTheme(),
       resultBackground: this.colors.resultBackground,
@@ -593,10 +594,10 @@ class UIManager {
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
       outline: none;
     `;
-    
+
     // Force text color using specific attribute for textarea as well
-    editableResult.setAttribute('style', 
-      editableResult.getAttribute('style') + 
+    editableResult.setAttribute('style',
+      editableResult.getAttribute('style') +
       `; color: ${this.colors.text} !important; text-color: ${this.colors.text} !important;`
     );
 
@@ -658,7 +659,7 @@ class UIManager {
     // Create a send button (initially hidden)
     const sendButton = document.createElement('button');
     sendButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
-    sendButton.title = 'Send result to chat';
+    sendButton.title = 'Submit result to chat';
     sendButton.style.cssText = `
       background-color: ${this.colors.purple};
       color: white;
@@ -807,7 +808,7 @@ class UIManager {
         new RegExp(safeToolCallText, 'g'),
         placeholder
       );
-      
+
       // Update the element's HTML with the placeholder
       toolCallElement.innerHTML = newHTML;
 
@@ -844,7 +845,7 @@ class UIManager {
     // Auto-run the tool if preferences are set
     if (canAutoRun) {
       const savedToolPrefs = this.getToolPreference(toolCall.tool);
-      if (savedToolPrefs.mode === 'autorun' || savedToolPrefs.mode === 'autosend') {
+      if (savedToolPrefs.mode === 'autorun' || savedToolPrefs.mode === 'autosubmit') {
         ran = true;
         console.log(`📡 Auto-running tool ${toolCall.tool} (mode: ${savedToolPrefs.mode})`);
         // Execute with a slight delay to allow the UI to render first
@@ -880,16 +881,18 @@ class UIManager {
 
       // Format the result message with params included
       const paramsStr = this.formatParameters(toolCall.parameters);
-      const resultMessage = `${UIManager.TOOL_RESULT_TAG}${toolCall.tool}${paramsStr}:\n${result}`;
+      const toolName = toolCall.tool.startsWith(UIManager.MCPT_TOOLS_PREFIX) ?
+        toolCall.tool.slice(UIManager.MCPT_TOOLS_PREFIX.length) : toolCall.tool;
+      const resultMessage = `${UIManager.TOOL_RESULT_TAG}${toolName}${paramsStr}:\n${result}`;
 
       // Enter the result into the message box and preserve newlines
       inputElement.focus();
-      
+
       // Preserve newlines by using innerHTML with <br> tags
       const formattedMessage = '<p>' + resultMessage.replace(/\n/g, '</p><p>') + '</p>';
       console.log('📡 Formatted message:', formattedMessage);
       inputElement.innerHTML = formattedMessage;
-      
+
       inputElement.dispatchEvent(new Event('input', { bubbles: true }));
 
       // Simulate pressing Enter to send the message
@@ -946,7 +949,7 @@ class UIManager {
 
       // Find the chat content area to inject the message using platform adapter
       const chatContainer = this.platformAdapter.getMainContainer();
-      
+
       if (chatContainer) {
         chatContainer.prepend(errorDiv);
 
@@ -969,7 +972,7 @@ class UIManager {
    */
   createSystemPromptToggle(blockDescription, toolDefinitions, parentElement, deepestNode) {
     console.log('🎨 Creating system prompt toggle with theme:', this.themeManager?.getCurrentTheme());
-    
+
     // Create toggle button with theme-aware styling
     const toggleButton = document.createElement('button');
     toggleButton.className = 'tool-definitions-toggle';
@@ -986,7 +989,7 @@ class UIManager {
       display: inline-block;
       transition: color 0.2s ease;
     `;
-    
+
     // Create container for tool definitions with theme-aware styling
     const toolDefElement = document.createElement('div');
     toolDefElement.className = 'tool-definitions-container';
@@ -1006,16 +1009,16 @@ class UIManager {
       line-height: 1.4;
     `;
     toolDefElement.textContent = toolDefinitions;
-    
+
     // Add hover effect to toggle button
     toggleButton.addEventListener('mouseover', () => {
       toggleButton.style.color = this.colors.text;
     });
-    
+
     toggleButton.addEventListener('mouseout', () => {
       toggleButton.style.color = this.colors.textSecondary;
     });
-    
+
     // Toggle visibility on click
     toggleButton.addEventListener('click', (e) => {
       e.preventDefault();
@@ -1024,41 +1027,41 @@ class UIManager {
       toolDefElement.style.display = isHidden ? 'block' : 'none';
       toggleButton.textContent = isHidden ? `[Hide ${blockDescription}]` : `[Show ${blockDescription}]`;
     });
-    
+
     // Insert the toggle button after the modified text node
     if (deepestNode.nextSibling) {
       parentElement.insertBefore(toggleButton, deepestNode.nextSibling);
     } else {
       parentElement.appendChild(toggleButton);
     }
-    
+
     // Find the best container for the tool definitions
     let toolDefContainer = parentElement;
-    
+
     // Try to find a better container with proper styling
     let messageContainer = parentElement;
-    while (messageContainer && 
-          (!messageContainer.className || 
-           !messageContainer.className.includes('message-container') && 
-           !messageContainer.className.includes('bg-token'))) {
+    while (messageContainer &&
+      (!messageContainer.className ||
+        !messageContainer.className.includes('message-container') &&
+        !messageContainer.className.includes('bg-token'))) {
       messageContainer = messageContainer.parentElement;
-      if (messageContainer && (messageContainer.className && 
-          (messageContainer.className.includes('message-container') || 
-           messageContainer.className.includes('bg-token')))) {
+      if (messageContainer && (messageContainer.className &&
+        (messageContainer.className.includes('message-container') ||
+          messageContainer.className.includes('bg-token')))) {
         toolDefContainer = messageContainer;
         break;
       }
     }
-    
+
     toolDefContainer.appendChild(toolDefElement);
-    
+
     console.log('🎨 System prompt toggle created with theme colors:', {
       toggleColor: this.colors.textSecondary,
       backgroundLight: this.colors.backgroundLight,
       text: this.colors.text,
       border: this.colors.border
     });
-    
+
     return { toggleButton, toolDefElement };
   }
 
@@ -1070,7 +1073,7 @@ class UIManager {
 
     const settingsButton = document.createElement('button');
     settingsButton.id = 'mcp-settings-button';
-    
+
     // Create image element for the icon
     const iconImg = document.createElement('img');
     iconImg.style.cssText = `
@@ -1080,14 +1083,14 @@ class UIManager {
       pointer-events: none;
       object-fit: cover;
     `;
-    
+
     // Set initial icon based on current theme
     this._updateButtonIcon(iconImg);
     console.log('📡 MCP settings button created', this.extensionUrl, iconImg.src, iconImg);
-    
+
     settingsButton.appendChild(iconImg);
     settingsButton.title = 'MCP Settings (Ctrl+M)';
-    
+
     settingsButton.style.cssText = `
       position: fixed;
       bottom: 20px;
@@ -1140,10 +1143,10 @@ class UIManager {
    */
   _updateButtonIcon(iconImg) {
     if (!iconImg) return;
-    
+
     const currentTheme = this.themeManager?.getCurrentTheme() || 'light';
     const iconName = currentTheme === 'dark' ? 'icon128_dark.png' : 'icon128.png';
-    iconImg.src = `${this.extensionUrl}assets/${iconName}`;    
+    iconImg.src = `${this.extensionUrl}assets/${iconName}`;
     console.log(`📡 Updated MCP button icon to: ${iconName} (theme: ${currentTheme})`);
   }
 

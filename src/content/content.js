@@ -27,9 +27,16 @@ async function updateMcptServers(servers) {
 
 async function initMonitor() {
   // this is to avoid the "tabs" permission
+  prevServers = [];
   setInterval(async () => {
     chrome.runtime.sendMessage({ type: 'GET_STORED_MCPT_SERVERS' }, (response) => {
-      updateMcptServers(response.servers);
+      if (JSON.stringify(response.servers) !== JSON.stringify(prevServers)) {
+        console.log('🔍 MCP servers changed');
+        console.log('🔍 Previous servers:', prevServers);
+        console.log('🔍 New servers:', response.servers);
+        updateMcptServers(response.servers);
+        prevServers = response.servers;
+      }
     });
   }, 2000);
 }

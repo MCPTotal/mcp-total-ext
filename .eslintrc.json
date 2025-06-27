@@ -5,9 +5,7 @@
     "jest": true,
     "node": true
   },
-  "extends": [
-    "eslint:recommended"
-  ],
+  "extends": ["eslint:recommended"],
   "parserOptions": {
     "ecmaVersion": "latest",
     "sourceType": "module"
@@ -15,11 +13,7 @@
   "globals": {
     "chrome": "readonly"
   },
-  "ignorePatterns": [
-    "src/mcpClient/mcp-browser-generated.js",
-    "**/*.generated.js",
-    "dist/**/*"
-  ],
+  "ignorePatterns": ["src/mcpClient/mcp-browser-generated.js", "**/*.generated.js", "dist/**/*"],
   "rules": {
     "no-unused-vars": "warn",
     "no-console": "off",
@@ -33,22 +27,14 @@
     "no-multiple-empty-lines": ["error", { "max": 2, "maxEOF": 1 }],
     "indent": ["warn", 2, { "SwitchCase": 1 }],
     "comma-dangle": ["warn", "only-multiline"],
-    "max-len": ["warn", { 
-      "code": 100, 
-      "ignoreComments": true, 
-      "ignoreStrings": true, 
-      "ignoreTemplateLiterals": true 
-    }]
-  },
-  "overrides": [
-    {
-      "files": ["*.ts"],
-      "parser": "@typescript-eslint/parser",
-      "plugins": ["@typescript-eslint"],
-      "extends": [
-        "eslint:recommended",
-        "plugin:@typescript-eslint/recommended"
-      ]
-    }
-  ]
-} 
+    "max-len": [
+      "warn",
+      {
+        "code": 100,
+        "ignoreComments": true,
+        "ignoreStrings": true,
+        "ignoreTemplateLiterals": true
+      }
+    ]
+  }
+}

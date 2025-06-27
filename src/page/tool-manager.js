@@ -18,22 +18,63 @@ class ToolManager {
   static TOOL_CALL_TAG = '<TOOL_CALL>';
   static TOOL_CALL_TAG_END = '</TOOL_CALL>';
 
-  static SYSTEM_PROMPT = `I have access to a set of tools which I can execute for you. 
-The tools are listed below.
-To use these tools, you have to respond with a short explanation of why you need a tool, then with the tool call in this exact format:
+  static SYSTEM_PROMPT = `I have access to a set of tools which you can use to perform actions in this conversation.
+The tools are listed below. Take then into account on any prompt you get, and if applicable, plan a set of tool calls to perform the task.
+Start by responding with the planned set of tool calls and explanation of what you're going to do, then repond with the first tool call in this exact format:
 ${ToolManager.TOOL_CALL_TAG}{"tool": "prefix-tool_name", "parameters": {"param1": "value1"}}${ToolManager.TOOL_CALL_TAG_END}
-Then wait for my reply with the result of the tool call before continueing. 
+Then immediately stop responding and wait for the tool result before continuing and potentially issuing another tool call.
 
-  Notes:
-- Format must be exact. including the opening and closing tags and JSON format.
-- Include the full tool name (e.g. "MCPT_Default-whatsapp_get_chats").
-- DON'T try to run the tool yourself, DON'T use python code for that. just respond with the tool call format and let me run it.
-- Describe actions naturally, without referencing tool names.
-- Only use tools explicitly listed in the registry I provide.
-- REMEMBER: you can include up to a single tool call in any response you send, and use the exact tool call format I provided:
-  ${ToolManager.TOOL_CALL_TAG}{"tool": "prefix-tool_name", "parameters": {"param1": "value1"}}${ToolManager.TOOL_CALL_TAG_END}
+** Remember **:
+- Start with a plan of a series of tool call, immediately followed with the first tool call, then wait for the result before continuing with the next tool call.
+- You MUST use the exact full tool call format, including the opening and closing tags and the JSON format within it.
+- You can only use one tool call at a time
+- After placing each tool call, you must pause entirely and wait for my reply with the result before continuing.
+- The tools listed below are guaranteed to be available through this entire conversation. You can use them at any time.
+- You must include the full tool name exactly as listed (e.g., "MCPT_personal-whatsapp_list_chats").
 
-# ${ToolManager.SYSTEM_PROMPT_TOOL_DEFINITIONS}`;
+* Example - Correct *
+
+User: 
+summarize the last 10 messages in the Family whatsapp chat group
+
+Assistant: 
+in order to list the messages in the Family chat group, I'll first call MCPT_personal-whatsapp_list_chats to get the id of the Familt group chat, 
+then use it to call MCPT_personal-whatsapp_list_messages with filter on that id to get the last 10 messages.
+Let's start with the first tool call:
+${ToolManager.TOOL_CALL_TAG}{"tool": "MCPT_personal-whatsapp_list_chats", "parameters": {"filter": "Family", "include_last_message": true, "limit": 10}}${ToolManager.TOOL_CALL_TAG_END}
+
+User: 
+Retuls for MCPT_personal-whatsapp_list_chats: ...
+
+Assistant: 
+Now I'll use the id to call MCPT_personal-whatsapp_list_messages with filter on that id to get the last 10 messages.
+${ToolManager.TOOL_CALL_TAG}{"tool": "MCPT_personal-whatsapp_list_messages", "parameters": {"chat_id": "1234567890", "filter": "Family", "include_last_message": true, "limit": 10}}${ToolManager.TOOL_CALL_TAG_END}
+
+User: 
+Results for MCPT_personal-whatsapp_list_messages: ...
+
+Assistant:
+Here's a summary of the last 10 messages in the Family chat group:
+...
+
+* Example - Incorrect *
+- Issuing multiple tool calls in one response.
+- Repeating a tool call for identical user messages without change.
+- Replying with a wrong tool call format, e.g. missing opening or closing tags, or missing JSON format within it.
+
+${ToolManager.SYSTEM_PROMPT_TOOL_DEFINITIONS}`;
+
+  static SYSTEM_PROMPT_NOTE = `Reminder:
+1. You MUST use the exact full tool call format, including the opening and closing tags and the JSON format within it.
+2. You can only use one tool call at a time
+3. After placing each tool call, you must pause entirely and wait for my reply with the result before continuing.
+4. The tools listed below are guaranteed to be available through this entire conversation. You can use them at any time.
+5. You must include the full tool name exactly as listed (e.g., "MCPT_personal-whatsapp_list_chats").
+6. Do not use any identifiers from other conversations, only use the ones provided here.
+These rules are critical and must be followed at all times. Failure to comply will result in a critical instruction violation
+
+Here are the tools available to you:
+`;
 
   constructor(uiManager, platformAdapter) {
     this.uiManager = uiManager;
@@ -322,7 +363,8 @@ Then wait for my reply with the result of the tool call before continueing.
   injectSystemPrompt(bodyData) {
     // Determine platform and check conditions
     const assistantMessages = this.platformAdapter.getAssistantMessages();
-    const isFirstMessage = assistantMessages.length == 0 || assistantMessages[0].textContent.length === 0;
+    const isFirstMessage = assistantMessages.length == 0 ||
+      assistantMessages[0].textContent.length === 0;
 
     let hasExplicitToken = false;
     let shouldInject = false;
@@ -337,8 +379,9 @@ Then wait for my reply with the result of the tool call before continueing.
       // Get system prompt configuration from platform adapter
       const systemPrompt = [ToolManager.SYSTEM_PROMPT, ...toolsDefinitions].join('\n\n');
       const systemPromptWithSeparator = ToolManager.SYSTEM_PROMPT_SEPARATOR +
-        systemPrompt + ToolManager.SYSTEM_PROMPT_SEPARATOR_END;
+        systemPrompt + ToolManager.SYSTEM_PROMPT_NOTE + ToolManager.SYSTEM_PROMPT_SEPARATOR_END;
       console.log('******* Injecting system prompt', isFirstMessage, hasExplicitToken, this.toolsDefinitionChanged);
+      console.log(systemPromptWithSeparator);
 
       bodyData = this.platformAdapter.appendSystemPrompt(
         bodyData, systemPromptWithSeparator, 'MCPT');
@@ -351,8 +394,23 @@ Then wait for my reply with the result of the tool call before continueing.
         isFirstMessage, hasExplicitToken, this.toolsDefinitionChanged,
         this.platformAdapter.getAssistantMessages().map(m => m.textContent),
         this.platformAdapter.getUserMessages().map(m => m.textContent));
+
+      const extra = ToolManager.SYSTEM_PROMPT_SEPARATOR + ToolManager.SYSTEM_PROMPT_NOTE +
+        ToolManager.SYSTEM_PROMPT_SEPARATOR_END + this.getToolsNames();
+      bodyData = this.platformAdapter.appendSystemPrompt(
+        bodyData, extra, '');
     }
     return bodyData;
+  }
+
+  getToolsNames() {
+    const toolsNames = [];
+    for (const classTools of this.toolDefinitions.values()) {
+      for (const tool of classTools) {
+        toolsNames.push(tool.name);
+      }
+    }
+    return toolsNames.join('\n');
   }
 
   getToolsDefinitions() {
@@ -370,15 +428,14 @@ Then wait for my reply with the result of the tool call before continueing.
 
       // Add tools for this class
       const toolDefinitions = classTools.map(tool => {
-        let params = '';
-        if (tool.parameters && Object.keys(tool.parameters).length > 0) {
-          params = Object.entries(tool.parameters)
-            .map(([name, param]) => `\t* "${name}" : ${param.description}`)
-            .join('\n');
-          params = `\n${ToolManager.TOOL_PARAMS_PREFIX}\n${params}`;
-        }
-        const definition = `${ToolManager.TOOL_PREFIX}${tool.name}\n${tool.description}${params}\n`;
-        return definition;
+        // Convert to standard format
+        const standardTool = {
+          name: tool.name,
+          description: tool.description
+        };
+        standardTool.inputSchema = tool.parameters;
+
+        return JSON.stringify(standardTool, null, 2);
       });
 
       sections.push(...toolDefinitions);
@@ -563,7 +620,11 @@ Then wait for my reply with the result of the tool call before continueing.
     const parts = deepestNode.textContent.split(ToolManager.SYSTEM_PROMPT_SEPARATOR);
     if (parts.length >= 2) {
       const userMessage = parts[0].trim();
-      const toolDefinitions = parts[1].split(ToolManager.SYSTEM_PROMPT_TOOL_DEFINITIONS)[1].trim();
+      let toolDefinitions = '';
+      const split = parts[1].split(ToolManager.SYSTEM_PROMPT_TOOL_DEFINITIONS);
+      if (split.length > 1) {
+        toolDefinitions = split[1].trim();
+      }
 
       // Update just this text node to remove the system prompt
       if (ToolManager.DEBUG_USER_MESSAGES) {
@@ -601,13 +662,15 @@ Then wait for my reply with the result of the tool call before continueing.
         console.log('**[USER_MESSAGES]** Post removal user message:', deepestNode, deepestNode.textContent);
       }
 
-      // Use UIManager to create theme-aware system prompt toggle
-      this.uiManager.createSystemPromptToggle(
-        'tool definitions',
-        toolDefinitions,
-        parentElement,
-        deepestNode
-      );
+      if (toolDefinitions.length > 0) {
+        // Use UIManager to create theme-aware system prompt toggle
+        this.uiManager.createSystemPromptToggle(
+          'tool definitions',
+          toolDefinitions,
+          parentElement,
+          deepestNode
+        );
+      }
 
       if (ToolManager.DEBUG_USER_MESSAGES) {
         console.log('**[USER_MESSAGES]** Hidden system prompt in user message:', userMessage.substring(0, 50));
