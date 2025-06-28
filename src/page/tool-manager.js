@@ -9,8 +9,6 @@ class ToolManager {
   static DEBUG_SYSTEM_PROMPTS = false;
 
   // Static properties
-  static TOOL_PREFIX = '### ';
-  static TOOL_PARAMS_PREFIX = 'PARAMS:';
   static SYSTEM_PROMPT_SEPARATOR = '===TOOLS-INSTRUCTIONS==='; // Add separator constant
   static SYSTEM_PROMPT_SEPARATOR_END = '===TOOLS-END===';
   static SYSTEM_PROMPT_TOOL_DEFINITIONS = '***Available Tools:';
@@ -686,6 +684,11 @@ Here are the tools available to you:
     //console.log('** [USER_MESSAGES] ** Processing user message for result:', userMessageNode, userMessageNode.textContent);
     const deepestNode = this.findDeepestNodeWith(userMessageNode, [ToolManager.TOOL_RESULT_TAG]);
     if (deepestNode) {
+      if (deepestNode.classList && deepestNode.classList.contains('tool-definitions-container') ||
+        deepestNode.parentElement && deepestNode.parentElement.classList &&
+        deepestNode.parentElement.classList.contains('tool-definitions-container')) {
+        return false;
+      }
       const originalText = deepestNode.textContent;
       deepestNode.textContent = '';
       const parentElement = deepestNode.nodeType === Node.TEXT_NODE ?
@@ -706,6 +709,11 @@ Here are the tools available to you:
     const deepestNode = this.findDeepestNodeWith(userMessageNode,
       [ToolManager.SYSTEM_PROMPT_SEPARATOR, ToolManager.SYSTEM_PROMPT_SEPARATOR_END]);
     if (!deepestNode) {
+      return false;
+    }
+    if (deepestNode.classList && deepestNode.classList.contains('tool-definitions-container') ||
+      deepestNode.parentElement && deepestNode.parentElement.classList &&
+      deepestNode.parentElement.classList.contains('tool-definitions-container')) {
       return false;
     }
 
@@ -784,8 +792,8 @@ Here are the tools available to you:
     this.markNodeAsProcessed(userMessageNode);
 
     // Check if this message has already been processed
-    const hasSystemPrompt = userMessageNode.querySelector('.tool-definitions-toggle');
-    if (hasSystemPrompt) return;
+    //const hasSystemPrompt = userMessageNode.querySelector('.tool-definitions-toggle');
+    //if (hasSystemPrompt) return;
 
     this.processUserMessageForSystemPrompt(userMessageNode);
     this.processUserMessageForResult(userMessageNode);

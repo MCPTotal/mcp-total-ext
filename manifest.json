@@ -1,7 +1,7 @@
 {
   "name": "MCPTotal",
   "description": "MCPTotal: Supercharge Your AI Chats With Tools. Instantly.",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "manifest_version": 3,
   "permissions": ["storage"],
   "background": {
