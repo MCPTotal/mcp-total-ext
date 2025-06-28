@@ -210,7 +210,7 @@ class McpUI {
             });
 
             serverItem.addEventListener('mouseout', () => {
-              serverItem.style.backgroundColor = server.enabled ? 
+              serverItem.style.backgroundColor = server.enabled ?
                 this.colors.backgroundLight : this.colors.backgroundModal;
               // Hide delete button when not hovering (only for non-readonly servers)
               if (!isReadOnly) {
@@ -236,10 +236,10 @@ class McpUI {
               border-radius: 4px;
               border-left: 3px solid ${this.colors.info};
             `;
-            
+
             const toolNames = server.cachedTools.map(tool => tool.name.replace(server.name, '').slice(1)).join(', ');
             const truncatedToolNames = toolNames.length > 150 ? toolNames.substring(0, 150) + '...' : toolNames;
-            
+
             cachedToolsRow.innerHTML = `
               <div style="font-size: 11px; color: ${this.colors.textSecondary}; margin-bottom: 2px;">
                 🔧 Tools (${server.cachedTools.length}):
@@ -248,7 +248,7 @@ class McpUI {
                 ${truncatedToolNames}
               </div>
             `;
-            
+
             serverInfo.appendChild(cachedToolsRow);
           }
 
@@ -274,7 +274,7 @@ class McpUI {
             display: inline-block;
             transition: background-color 0.2s ease;
           `;
-          
+
           // Add click handler for status toggle
           statusElement.onclick = async (e) => {
             e.stopPropagation(); // Prevent item click
@@ -304,12 +304,12 @@ class McpUI {
             display: inline-block;
             transition: background-color 0.2s ease;
           `;
-          
+
           // Add click handler for automation cycling
           automationElement.onclick = async (e) => {
             e.stopPropagation(); // Prevent item click
-            
-            // Cycle through automation modes: manual -> autorun -> autosend -> manual
+
+            // Cycle through automation modes: manual -> autorun -> autosubmit -> manual
             const currentMode = server.automation || 'manual';
             let nextMode;
             switch (currentMode) {
@@ -317,23 +317,23 @@ class McpUI {
                 nextMode = 'autorun';
                 break;
               case 'autorun':
-                nextMode = 'autosend';
+                nextMode = 'autosubmit';
                 break;
-              case 'autosend':
+              case 'autosubmit':
                 nextMode = 'manual';
                 break;
               default:
                 nextMode = 'manual';
             }
-            
+
             // Update server automation
             await this.mcpManager.setServerAutomation(server.name, nextMode);
-            
+
             // Apply automation preferences to existing tools from this server
             if (this.toolManager) {
               this.applyServerAutomationToTools(server.name, nextMode);
             }
-            
+
             renderServerList();
           };
 
@@ -359,7 +359,7 @@ class McpUI {
 
           // Create appropriate button for top-right corner
           const topRightBtn = document.createElement('div');
-          
+
           if (isReadOnly) {
             // MCP Total managed server icon
             const iconImg = document.createElement('img');
@@ -374,7 +374,7 @@ class McpUI {
               object-fit: cover;
             `;
             topRightBtn.appendChild(iconImg);
-            
+
             topRightBtn.title = 'Managed by MCP Total';
             topRightBtn.style.cssText = `
               position: absolute;
@@ -511,7 +511,7 @@ class McpUI {
     testConnectionButton.onclick = async () => {
       // Store original content for restoration
       const originalContent = testConnectionButton.innerHTML;
-      
+
       // Show loading state
       testConnectionButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>';
       testConnectionButton.style.animation = 'spin 1s linear infinite';
@@ -592,17 +592,17 @@ class McpUI {
       padding: 10px 0;
       border-top: 1px solid ${this.colors.border};
     `;
-    
+
     // Create right side container for add/test buttons
     const rightButtonsContainer = document.createElement('div');
     rightButtonsContainer.style.cssText = `
       display: flex;
       gap: 8px;
     `;
-    
+
     rightButtonsContainer.appendChild(addButton);
     rightButtonsContainer.appendChild(testConnectionButton);
-    
+
     actionButtonsContainer.appendChild(closeButton);
     actionButtonsContainer.appendChild(rightButtonsContainer);
 
@@ -693,7 +693,7 @@ class McpUI {
             // Don't handle ESC if alert/confirmation dialogs are open
             return;
           }
-          
+
           e.stopPropagation(); // Prevent main modal ESC handler from firing
           e.preventDefault();
           closeFormModal();
@@ -712,7 +712,7 @@ class McpUI {
       // Assemble form modal
       formModal.appendChild(formModalContent);
       document.body.appendChild(formModal);
-      
+
       // Add ESC key listener
       document.addEventListener('keydown', handleFormEsc);
 
@@ -769,7 +769,7 @@ class McpUI {
       // Add hover effects for the form buttons
       const saveBtn = document.getElementById('save-btn');
       const cancelBtn = document.getElementById('cancel-btn');
-      
+
       // Add hover effects for save button
       saveBtn.addEventListener('mouseover', () => {
         saveBtn.style.backgroundColor = this.colors.primaryLight;
@@ -788,8 +788,8 @@ class McpUI {
 
       // Focus the first input field
       setTimeout(() => {
-        const firstInput = isEditing ? 
-          document.getElementById('server-url') : 
+        const firstInput = isEditing ?
+          document.getElementById('server-url') :
           document.getElementById('server-id');
         if (firstInput) firstInput.focus();
       }, 100);
@@ -992,7 +992,7 @@ class McpUI {
   /**
    * Apply server automation settings to all tools from that server
    * @param {string} serverId - The server ID
-   * @param {string} automation - The automation mode (manual/autorun/autosend)
+   * @param {string} automation - The automation mode (manual/autorun/autosubmit)
    */
   applyServerAutomationToTools(serverId, automation) {
     if (!this.toolManager) {
@@ -1004,7 +1004,7 @@ class McpUI {
 
   /**
    * Get automation display text based on the automation mode
-   * @param {string} automation - The automation mode (manual/autorun/autosend)
+   * @param {string} automation - The automation mode (manual/autorun/autosubmit)
    * @returns {string} - The display text for the automation mode
    */
   getAutomationDisplayText(automation) {
@@ -1013,8 +1013,8 @@ class McpUI {
         return 'Manual';
       case 'autorun':
         return 'Auto-run';
-      case 'autosend':
-        return 'Auto-run + send';
+      case 'autosubmit':
+        return 'Auto-run + submit';
       default:
         return 'Manual';
     }

@@ -12,7 +12,7 @@ const TerserPlugin = require('terser-webpack-plugin');
 
 // Root directory is the parent of the scripts directory
 const rootDir = path.resolve(__dirname, '..');
-const packageJson = require('../package.json');
+const manifestJson = require('../manifest.json');
 
 // Get the build target from environment variable
 const buildTarget = process.env.BUILD_TARGET || 'extension';
@@ -55,7 +55,7 @@ const commonConfig = {
     new webpack.DefinePlugin({
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       'process.env.IS_PRODUCTION': JSON.stringify(isProduction),
-      'process.env.VERSION': JSON.stringify(packageJson.version)
+      'process.env.VERSION': JSON.stringify(manifestJson.version)
     })
   ],
   watchOptions: {
@@ -148,4 +148,3 @@ const mcpClientConfig = {
 
 // Export the configuration based on build target
 module.exports = buildTarget === 'mcp' ? mcpClientConfig : extensionConfig;
- 

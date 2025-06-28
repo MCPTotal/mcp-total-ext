@@ -15,6 +15,17 @@ class BrowserMcpClient {
     this.transportType = null;
   }
 
+  // Helper method to get version safely
+  _getVersion() {
+    try {
+      return (typeof process !== 'undefined' && process.env && process.env.VERSION)
+        ? process.env.VERSION
+        : '1.3.3'; // fallback version
+    } catch (error) {
+      return '1.3.3'; // fallback version
+    }
+  }
+
   // Set authentication token
   setAuthToken(token) {
     this.authToken = token;
@@ -35,7 +46,7 @@ class BrowserMcpClient {
         // Create client instance
         this.client = new Client({
           name: 'browser-mcp-client',
-          version: '1.3.2'
+          version: this._getVersion()
         });
         // Create base URL object
         const url = new URL(this.serverUrl);
@@ -67,7 +78,7 @@ class BrowserMcpClient {
         // Create new client instance
         this.client = new Client({
           name: 'browser-mcp-client',
-          version: '1.3.2'
+          version: this._getVersion()
         });
 
         // For SSE transport, we MUST use URL parameters for authentication

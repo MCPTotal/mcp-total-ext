@@ -38,10 +38,10 @@ User:
 summarize the last 10 messages in the Family whatsapp chat group
 
 Assistant: 
-in order to list the messages in the Family chat group, I'll first call MCPT_personal-whatsapp_list_chats to get the id of the Familt group chat, 
+in order to list the messages in the Family chat group, I'll first call MCPT_personal-whatsapp_list_chats to get the id of the Family group chat, 
 then use it to call MCPT_personal-whatsapp_list_messages with filter on that id to get the last 10 messages.
 Let's start with the first tool call:
-${ToolManager.TOOL_CALL_TAG}{"tool": "MCPT_personal-whatsapp_list_chats", "parameters": {"filter": "Family", "include_last_message": true, "limit": 10}}${ToolManager.TOOL_CALL_TAG_END}
+${ToolManager.TOOL_CALL_TAG}{...}${ToolManager.TOOL_CALL_TAG_END}
 
 (STOP AND WAIT FOR MY REPLY)
 
@@ -50,7 +50,7 @@ Retuls for MCPT_personal-whatsapp_list_chats: ...
 
 Assistant: 
 Now I'll use the id to call MCPT_personal-whatsapp_list_messages with filter on that id to get the last 10 messages.
-${ToolManager.TOOL_CALL_TAG}{"tool": "MCPT_personal-whatsapp_list_messages", "parameters": {"chat_id": "1234567890", "filter": "Family", "include_last_message": true, "limit": 10}}${ToolManager.TOOL_CALL_TAG_END}
+${ToolManager.TOOL_CALL_TAG}{...}${ToolManager.TOOL_CALL_TAG_END}
 
 (STOP AND WAIT FOR MY REPLY)
 
@@ -61,22 +61,44 @@ Assistant:
 Here's a summary of the last 10 messages in the Family chat group:
 ...
 
-* Example - Incorrect *
-- Providing a second tool call without waitig for my reply
-- Repeating a tool call for identical user messages without change.
-- Replying with a wrong tool call format, e.g. missing opening or closing tags, or missing JSON format within it.
+* Example - Incorrect 1 - not waiting for the result *
+User: 
+summarize the last 10 messages in the Family whatsapp chat group
+
+Assistant: 
+in order to ... Let's start with the first tool call:
+${ToolManager.TOOL_CALL_TAG}{...}${ToolManager.TOOL_CALL_TAG_END}
+
+It looks like I don't actually have the WhatsApp tools connected in this chat.
+
+
+* Example - Incorrect 2 - multiple same tool calls without waiting for the result *
+User: 
+...
+
+Assistant: 
+in order to list the messages in the Family chat group, ... Let's start with the first tool call:
+${ToolManager.TOOL_CALL_TAG}{...}${ToolManager.TOOL_CALL_TAG_END}
+
+in order to list the messages in the Family chat group, ... Let's start with the first tool call:
+${ToolManager.TOOL_CALL_TAG}{...}${ToolManager.TOOL_CALL_TAG_END}
+...
+
+* Other incorrect patterns *
+- Multiple calls for different tools for the same user message, without waiting for the result of the previous tool call.
+- Replying with a wrong tool call format, e.g. missing opening or closing tags, or missing or invalidJSON format within it.
 
 ${ToolManager.SYSTEM_PROMPT_TOOL_DEFINITIONS}`;
 
   static SYSTEM_PROMPT_NOTE = `Reminder:
 1. You MUST use the exact complete tool call format, including the opening and closing tags and the JSON format within it.
+2. Make sure the JSON is valid.
 2. You can only use one tool call at a time
 3. After placing each tool call, you must pause entirely and wait for my reply with the result before continuing.
 4. The tools listed below are guaranteed to be available through this entire conversation. You can use them at any time.
 5. You must include the complete tool name exactly as listed (e.g., "MCPT_personal-whatsapp_list_chats").
 6. Do not use any identifiers from other conversations, only use the ones provided here.
 These rules are critical and must be followed at all times. Failure to comply will result in a critical instruction violation
-
 Here are the tools available to you:
 `;
 
@@ -195,7 +217,74 @@ Here are the tools available to you:
     return `Error: Unknown tool '${toolName}'`;
   }
 
-  // Extract tool calls from text
+  /**
+   * Attempts to parse JSON with various fallback strategies for common formatting issues
+   * @param {string} jsonString - The JSON string to parse
+   * @returns {object|null} - Parsed object or null on failure
+   */
+  robustJsonParse(jsonString) {
+    // First try standard JSON.parse
+    try {
+      return JSON.parse(jsonString);
+    } catch (firstError) {
+      console.warn('📡 Standard JSON.parse failed, trying robust parsing:', firstError.message);
+    }
+
+    // Try to fix common JSON issues
+    let cleanedJson = jsonString.trim();
+
+    try {
+      // 1. Fix trailing commas
+      cleanedJson = cleanedJson.replace(/,(\s*[}\]])/g, '$1');
+
+      // 2. Fix single quotes to double quotes (but be careful with apostrophes in strings)
+      cleanedJson = cleanedJson.replace(/'/g, '"');
+
+      // 3. Fix unquoted property names
+      cleanedJson = cleanedJson.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
+
+      // 4. Fix newlines in strings (escape them)
+      cleanedJson = cleanedJson.replace(/"([^"]*?)(\n|\r\n|\r)([^"]*?)"/g, (match, before, newline, after) => {
+        return `"${before}\\n${after}"`;
+      });
+
+      // Try parsing the cleaned JSON
+      return JSON.parse(cleanedJson);
+    } catch (secondError) {
+      console.warn('📡 Robust JSON parsing failed, trying final fallback:', secondError.message);
+    }
+
+    // Final fallback: try to extract tool and parameters with regex
+    try {
+      const toolMatch = cleanedJson.match(/"tool"\s*:\s*"([^"]+)"/);
+      const parametersMatch = cleanedJson.match(/"parameters"\s*:\s*(\{.*\})/s);
+
+      if (toolMatch) {
+        const result = { tool: toolMatch[1] };
+
+        if (parametersMatch) {
+          try {
+            result.parameters = JSON.parse(parametersMatch[1]);
+          } catch (paramError) {
+            console.warn('📡 Could not parse parameters, using empty object:', paramError);
+            result.parameters = {};
+          }
+        } else {
+          result.parameters = {};
+        }
+
+        console.log('📡 Successfully extracted tool call using regex fallback:', result);
+        return result;
+      }
+    } catch (regexError) {
+      console.error('📡 Regex fallback failed:', regexError);
+    }
+
+    // If all else fails, return null
+    console.error('📡 All JSON parsing strategies failed for:', jsonString.substring(0, 100) + '...');
+    return null;
+  }
+
   extractToolCalls(text) {
     const toolCalls = [];
     let startIndex = 0;
@@ -209,18 +298,20 @@ Here are the tools available to you:
       if (end === -1) break;
 
       const toolCallText = text.slice(start + ToolManager.TOOL_CALL_TAG.length, end);
-      try {
-        const toolCall = JSON.parse(toolCallText);
-        if (toolCall.tool) {
-          toolCalls.push({
-            tool: toolCall.tool,
-            parameters: toolCall.parameters || {},
-            execute: () => this.executeToolCall(toolCall.tool, toolCall.parameters),
-            toolCallText: text.slice(start, end + ToolManager.TOOL_CALL_TAG_END.length)
-          });
-        }
-      } catch (e) {
-        console.error('📡 Error parsing tool call:', e);
+
+      // Use robust JSON parsing
+      const toolCall = this.robustJsonParse(toolCallText);
+
+      if (toolCall && toolCall.tool) {
+        toolCalls.push({
+          tool: toolCall.tool,
+          parameters: toolCall.parameters || {},
+          execute: () => this.executeToolCall(toolCall.tool, toolCall.parameters),
+          toolCallText: text.slice(start, end + ToolManager.TOOL_CALL_TAG_END.length)
+        });
+        console.log('📡 Successfully parsed tool call:', toolCall.tool);
+      } else {
+        console.error('📡 Failed to parse tool call, skipping:', toolCallText.substring(0, 100) + '...');
       }
 
       startIndex = end + ToolManager.TOOL_CALL_TAG_END.length;
@@ -400,7 +491,7 @@ Here are the tools available to you:
         this.platformAdapter.getUserMessages().map(m => m.textContent));
 
       const extra = ToolManager.SYSTEM_PROMPT_SEPARATOR + ToolManager.SYSTEM_PROMPT_NOTE +
-        ToolManager.SYSTEM_PROMPT_SEPARATOR_END + this.getToolsNames();
+        this.getToolsNames() + ToolManager.SYSTEM_PROMPT_SEPARATOR_END;
       bodyData = this.platformAdapter.appendSystemPrompt(
         bodyData, extra, '');
     }

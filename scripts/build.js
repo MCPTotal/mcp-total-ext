@@ -36,7 +36,7 @@ function printStatus(message, status = 'info') {
     warning: `${COLORS.yellow}[WARNING]${COLORS.reset}`,
     error: `${COLORS.magenta}[ERROR]${COLORS.reset}`,
   };
-  
+
   console.log(`${prefix[status]} ${message}`);
 }
 
@@ -44,8 +44,8 @@ function printStatus(message, status = 'info') {
 function executeCommand(command, cwd = ROOT_DIR, env = {}) {
   try {
     printStatus(`Executing: ${command}, Build Target: ${env.BUILD_TARGET}`);
-    execSync(command, { 
-      cwd, 
+    execSync(command, {
+      cwd,
       stdio: 'inherit',
       env: { ...process.env, ...env }
     });
@@ -59,11 +59,11 @@ function executeCommand(command, cwd = ROOT_DIR, env = {}) {
 // Build the MCP client
 function buildMcpClient(mode = 'production') {
   printStatus('Building MCP client...', 'info');
-  
+
   // Ensure the target directories exist
-  const MCP_SDK_DIR = path.join(SRC_DIR, 'mcpClient');  
+  const MCP_SDK_DIR = path.join(SRC_DIR, 'mcpClient');
   fs.mkdirSync(MCP_SDK_DIR, { recursive: true });
-  
+
   // Build the browser-compatible version using the unified webpack config
   if (!executeCommand(
     `webpack --config ${path.join(SCRIPTS_DIR, 'webpack.config.js')} --mode=${mode}`,
@@ -72,7 +72,7 @@ function buildMcpClient(mode = 'production') {
   )) {
     return false;
   }
-  
+
   printStatus('MCP client built successfully', 'success');
   return true;
 }
@@ -81,13 +81,13 @@ function buildMcpClient(mode = 'production') {
 function buildExtension(mode = 'production') {
   const isProduction = mode === 'production';
   printStatus(`Building extension in ${mode} mode...`, 'info');
-  
+
   if (isProduction) {
     printStatus('Production build: Debug and info logs will be stripped', 'info');
   } else {
     printStatus('Development build: All logs will be preserved', 'info');
   }
-  
+
   // Run webpack with the unified config
   if (!executeCommand(
     `webpack --config ${path.join(SCRIPTS_DIR, 'webpack.config.js')} --mode=${mode}`,
@@ -96,10 +96,10 @@ function buildExtension(mode = 'production') {
   )) {
     return false;
   }
-  
+
   // Copy static assets
   copyAssets();
-  
+
   printStatus(`Extension built successfully in ${mode} mode`, 'success');
   return true;
 }
@@ -107,17 +107,17 @@ function buildExtension(mode = 'production') {
 // Copy static assets
 function copyAssets() {
   printStatus('Copying static assets...', 'info');
-  
+
   // Create assets directory
   const ICONS_DIR = path.join(DIST_DIR, 'assets');
   fs.mkdirSync(ICONS_DIR, { recursive: true });
-  
+
   // Copy manifest.json
   fs.copyFileSync(
     path.join(ROOT_DIR, 'manifest.json'),
     path.join(DIST_DIR, 'manifest.json')
   );
-  
+
   // Copy icons if they exist
   const SOURCE_ICONS_DIR = path.join(ROOT_DIR, 'assets');
   if (fs.existsSync(SOURCE_ICONS_DIR)) {
@@ -128,7 +128,7 @@ function copyAssets() {
       );
     });
   }
-  
+
   printStatus('Assets copied successfully', 'success');
   return true;
 }
@@ -136,43 +136,77 @@ function copyAssets() {
 // Clean dist directory
 function cleanDist() {
   printStatus('Cleaning dist directory...', 'info');
-  
+
   if (fs.existsSync(DIST_DIR)) {
     fs.rmSync(DIST_DIR, { recursive: true, force: true });
   }
-  
+
   fs.mkdirSync(DIST_DIR, { recursive: true });
-  
+
   printStatus('Dist directory cleaned', 'success');
   return true;
+}
+
+// Sync package.json version from manifest.json
+function syncPackageVersion() {
+  printStatus('Syncing package.json version from manifest.json...', 'info');
+
+  try {
+    // Read manifest.json
+    const manifestPath = path.join(ROOT_DIR, 'manifest.json');
+    const manifestJson = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+
+    // Read package.json
+    const packagePath = path.join(ROOT_DIR, 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+
+    // Update manifest.json version if different
+    if (packageJson.version !== manifestJson.version) {
+      manifestJson.version = packageJson.version;
+      fs.writeFileSync(manifestPath, JSON.stringify(manifestJson, null, 2) + '\n');
+      printStatus(`Updated manifest.json version to ${manifestJson.version}`, 'success');
+    } else {
+      printStatus(`Manifest.json version already matches package.json (${manifestJson.version})`, 'info');
+    }
+
+    return true;
+  } catch (error) {
+    printStatus(`Error syncing package version: ${error.message}`, 'error');
+    return false;
+  }
 }
 
 // Main build function
 async function build() {
   const startTime = Date.now();
-  
+
   printStatus(`${COLORS.bright}Starting unified build process${COLORS.reset}`, 'info');
-  
+
   // Parse command line arguments
   const args = process.argv.slice(2);
   const mode = args.includes('--dev') ? 'development' : 'production';
   const skipMcp = args.includes('--skip-mcp');
   const skipClean = args.includes('--skip-clean');
   const skipExtension = args.includes('--skip-extension');
-  
+
   // Execute build steps
   if (!skipClean && !cleanDist()) {
     process.exit(1);
   }
-  
+
+  // Always sync package version from manifest
+  if (!syncPackageVersion()) {
+    process.exit(1);
+  }
+
   if (!skipMcp && !buildMcpClient(mode)) {
     process.exit(1);
   }
-  
+
   if (!skipExtension && !buildExtension(mode)) {
     process.exit(1);
   }
-  
+
   const buildTime = ((Date.now() - startTime) / 1000).toFixed(2);
   printStatus(`${COLORS.bright}Build completed in ${buildTime}s${COLORS.reset}`, 'success');
 }

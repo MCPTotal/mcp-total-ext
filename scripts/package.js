@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 
-// Get version from package.json
+// Get version from manifest.json
 const manifestJson = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
 const version = manifestJson.version;
 
@@ -24,7 +24,7 @@ archive.on('error', (err) => {
 });
 
 // Listen for all archive data to be written
-output.on('close', function() {
+output.on('close', function () {
   console.log(`Packaging complete: dist/mcp-total-ext-v${version}.zip`);
   console.log(`Total size: ${archive.pointer()} bytes`);
 });

@@ -1,6 +1,6 @@
 {
   "name": "@piiano/mcp-total-ext",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Inject MCP tool definitions and handle tool calls when using ChatGPT in the browser",
   "private": true,
   "scripts": {
@@ -11,7 +11,7 @@
     "build:mcp": "node scripts/build.js --skip-clean --skip-extension",
     "quick": "node scripts/build.js --skip-mcp",
     "clean": "rimraf dist",
-    "package": "npm run build && node scripts/package.js",
+    "package": "npm i && npm run build && node scripts/package.js",
     "package:only": "node scripts/package.js",
     "test": "jest",
     "test:watch": "jest --watch",

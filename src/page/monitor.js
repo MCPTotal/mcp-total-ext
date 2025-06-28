@@ -2,6 +2,16 @@
 // Works in both production and debug modes
 
 (async function () {
+  // Helper method to get version safely
+  function _getVersion() {
+    try {
+      return (typeof process !== 'undefined' && process.env && process.env.VERSION)
+        ? process.env.VERSION
+        : '1.3.3'; // fallback version
+    } catch (error) {
+      return '1.3.3'; // fallback version
+    }
+  }
   // Quick check for debug mode
   let isProduction = false;
   try {
@@ -196,6 +206,6 @@
     });
 
     // Send startup message
-    sendContentMessage('MONITOR_STARTED', { version: '1.3.2' });
+    sendContentMessage('MONITOR_STARTED', { version: _getVersion() });
   }
 })(); 
