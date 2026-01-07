@@ -29,7 +29,7 @@
   "author": "Ariel Shiftan",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.13.2"
+    "@modelcontextprotocol/sdk": "^1.25.2"
   },
   "devDependencies": {
     "@babel/core": "^7.27.7",
